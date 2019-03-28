@@ -10,12 +10,11 @@ class ScaledPreconditioner(BaseMatrix):
         self.factor = factor
         self.matrix = matrix
         self.pre = pre
-    def Mult (self, x, y):
-        y.data = self.pre * x
-        y *= self.factor
-    def MultTrans(self, x, y):
-        y.data = self.pre.MultTrans(x, y)
-        y *= self.factor
+    def MultAdd(self, s, x, y):
+        y.data = self.factor * s * self.pre * x
+    def MultTransAdd(self, s, x, y):
+        # pre is assumed to be symmetric therefore leave out .T
+        y.data = self.factor * s * self.pre * x
     def Height (self):
         return self.pre.height
     def Width (self):
@@ -27,19 +26,17 @@ class ScaledPreconditioner(BaseMatrix):
     def CreateRowVector(self):
         return self.matrix.CreateRowVector()
 
-def BramblePasciakCG(matA, matB, matC, rhsUpper, rhsLower, preA=None, preM=None, sol=None, tol=1e-12, maxsteps=100, printrates=True, initialize = True):
+def BramblePasciakCG(matA, matB, matC, rhsUpper, rhsLower, preA, preM, sol=None, tol=1e-12, maxsteps=1000, printrates=True, initialize = True):
     k = 1 / min(EigenValues_Preconditioner(mat=matA, pre=preA))
     print("scale factor: ", k)
     scaledPreA = ScaledPreconditioner(k, matA, preA)
 
     aTimesAPreMinusIdentity = matA @ scaledPreA - IdentityMatrix(matA.height)
     matT = BlockMatrix([[aTimesAPreMinusIdentity, None], [None, IdentityMatrix(matB.height)]])
-    matN = BlockMatrix([[matA, matB.T], [matB @ aTimesAPreMinusIdentity.T, matB @ scaledPreA @ matB.T]])
+    matN = BlockMatrix([[matA, matB.T], [matB @ aTimesAPreMinusIdentity.T, matB @ scaledPreA @ matB.T + matC if matC else matB @ scaledPreA @ matB.T]])
     matM = matT @ matN
     preCTimesT = BlockMatrix([[scaledPreA, None], [None, preM]])
 
-    timer = Timer("CG-Solver")
-    timer.Start()
     tempUpper = rhsUpper.CreateVector()
     tempLower = rhsLower.CreateVector()
     tempUpper.data = preA * rhsUpper
@@ -91,11 +88,10 @@ def BramblePasciakCG(matA, matB, matC, rhsUpper, rhsLower, preA=None, preM=None,
         err = sqrt(abs(pd))
         if printrates:
             print ("it = ", it, " err = ", err)
-        if err < tol*err0: break
+        if err < tol * err0: break
     else:
         print("Warning: CG did not converge to TOL")
 
-    timer.Stop()
     return u
 
 from ngsolve import *
@@ -111,7 +107,7 @@ from netgen.geom2d import SplineGeometry
 geo = SplineGeometry()
 geo.AddRectangle( (0, 0), (2, 0.41), bcs = ("wall", "outlet", "wall", "inlet"))
 geo.AddCircle ( (0.2, 0.2), r=0.05, leftdomain=0, rightdomain=1, bc="cyl")
-mesh = Mesh( geo.GenerateMesh(maxh=0.08))
+mesh = Mesh( geo.GenerateMesh(maxh=0.09))
 
 mesh.Curve(3)
 
@@ -148,11 +144,49 @@ gfu = GridFunction(V, name="u")
 gfp = GridFunction(Q, name="p")
 uin = CoefficientFunction( (1.5*4*y*(0.41-y)/(0.41*0.41), 0) )
 gfu.Set(uin, definedon=mesh.Boundaries("inlet"))
-
 sol = BlockVector( [gfu.vec, gfp.vec] )
+bramblePasciakTimer = Timer("BramblePasciakCG")
+bramblePasciakTimer.Start()
+BramblePasciakCG(a.mat, b.mat, None, f.vec, g.vec, preA, preM, sol, initialize=False, tol=1e-7, maxsteps=1000)
+bramblePasciakTimer.Stop()
 
-BramblePasciakCG(a.mat, b.mat, None, f.vec, g.vec, preA, preM, sol, initialize=False)
+gfu = GridFunction(V, name="u")
+gfp = GridFunction(Q, name="p")
+uin = CoefficientFunction( (1.5*4*y*(0.41-y)/(0.41*0.41), 0) )
+gfu.Set(uin, definedon=mesh.Boundaries("inlet"))
+sol = BlockVector( [gfu.vec, gfp.vec] )
+K = BlockMatrix( [ [a.mat, b.mat.T], [b.mat, None] ] )
+C = BlockMatrix( [ [preA, None], [None, preM] ] )
+rhs = BlockVector ( [f.vec, g.vec] )
+sol = BlockVector( [gfu.vec, gfp.vec] )
+minResTimer = Timer("MinRes")
+minResTimer.Start()
+solvers.MinRes(mat=K, pre=C, rhs=rhs, sol=sol, initialize=False, tol=1e-7, maxsteps=1000)
+minResTimer.Stop()
+
+XV = VectorH1(mesh, order=2, dirichlet="wall|inlet|cyl")
+V.SetOrder(TRIG,3)
+V.Update()
+Q = L2(mesh, order=1)
+X = FESpace([V,Q])
+u,p = X.TrialFunction()
+v,q = X.TestFunction()
+a = BilinearForm(X)
+a += SymbolicBFI(InnerProduct(grad(u),grad(v))+div(u)*q+div(v)*p)
+a.Assemble()
+gfu = GridFunction(X)
+uin = CoefficientFunction( (1.5*4*y*(0.41-y)/(0.41*0.41), 0) )
+gfu.components[0].Set(uin, definedon=mesh.Boundaries("inlet"))
+directTimer = Timer("direct")
+directTimer.Start()
+res = gfu.vec.CreateVector()
+res.data = -a.mat * gfu.vec
+inv = a.mat.Inverse(freedofs=X.FreeDofs(), inverse="umfpack")
+gfu.vec.data += inv * res
+directTimer.Stop()
+
+print("BramblePasciakCG took", bramblePasciakTimer.time, "seconds")
+print("MinRes took", minResTimer.time, "seconds")
+print("direct solver took", directTimer.time, "seconds")
 
 Draw(Norm(gfu.components[0]), mesh, "vel")
-
-IdentityMatrix(10) @ None

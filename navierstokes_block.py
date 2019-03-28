@@ -27,11 +27,13 @@ a += SymbolicBFI(InnerProduct(grad(u),grad(v)))
 b = BilinearForm(trialspace=V, testspace=Q)
 b += SymbolicBFI(div(u)*q)
 
+preA = Preconditioner(a, 'multigrid')
 a.Assemble()
 b.Assemble()
 
 mp = BilinearForm(Q)
 mp += SymbolicBFI(p*q)
+preM = Preconditioner(mp, 'local')
 mp.Assemble()
 
 f = LinearForm(V)
@@ -47,11 +49,11 @@ uin = CoefficientFunction( (1.5*4*y*(0.41-y)/(0.41*0.41), 0) )
 gfu.Set(uin, definedon=mesh.Boundaries("inlet"))
 
 K = BlockMatrix( [ [a.mat, b.mat.T], [b.mat, None] ] )
-C = BlockMatrix( [ [a.mat.Inverse(V.FreeDofs()), None], [None, mp.mat.Inverse()] ] )
+C = BlockMatrix( [ [preA, None], [None, preM] ] )
 
 rhs = BlockVector ( [f.vec, g.vec] )
 sol = BlockVector( [gfu.vec, gfp.vec] )
 
-solvers.MinRes(mat=K, pre=C, rhs=rhs, sol=sol, initialize=False)
+solvers.MinRes(mat=K, pre=C, rhs=rhs, sol=sol, initialize=False, tol=1e-7, maxsteps=1000)
 
 Draw(Norm(gfu.components[0]), mesh, "vel")
