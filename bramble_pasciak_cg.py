@@ -66,7 +66,9 @@ def bramble_pasciak_cg(a_matrix, b_matrix, c_matrix, pre_a, pre_schur_complement
                                              [None, pre_schur_complement]])
 
     rhs = BlockVector([upper_rhs, lower_rhs])
-    solution = solution if solution else rhs.CreateVector()
+    if not solution:
+        solution = rhs.CreateVector()
+        solution[:] = 0
 
     residuum = rhs.CreateVector()
     temp_1 = rhs.CreateVector()

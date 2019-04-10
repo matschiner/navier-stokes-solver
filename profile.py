@@ -16,7 +16,7 @@ def create_mesh():
 def solve_with_bramble_pasciak_cg(a_matrix, b_matrix, pre_a, pre_schur_complement, gfu, gfp, f, g, tolerance, max_steps):
     sol = BlockVector([gfu, gfp])
     with TaskManager(pajetrace=100*1000*1000):
-        bramble_pasciak_cg(a_matrix, b_matrix, None, pre_a, pre_schur_complement, f, g, sol, \
+        bramble_pasciak_cg(a_matrix, b_matrix, None, pre_a, pre_schur_complement, f, g, None, \
                            tolerance=tolerance, max_steps=max_steps)
 
 def solve_with_max_bramble_pasciak_cg(a_matrix, b_matrix, pre_a, pre_schur_complement, gfu, gfp, f, g, tolerance, max_steps):
@@ -35,7 +35,7 @@ def solve_with_min_res(a, b, preA, preS, gfu, gfp, f, g, tolerance, max_steps):
         min_res_timer = Timer("MinRes")
         min_res_timer.Start()
         solvers.MinRes(mat=K, pre=C, rhs=rhs, sol=sol, \
-                       initialize=False, tol=tolerance, maxsteps=max_steps)
+                       initialize=True, tol=tolerance, maxsteps=max_steps)
         min_res_timer.Stop()
         print("MinRes took", min_res_timer.time, "seconds")
 
