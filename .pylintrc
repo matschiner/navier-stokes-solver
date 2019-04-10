@@ -206,6 +206,7 @@ additional-builtins=Mesh,
                     CoefficientFunction,
                     GridFunction,
                     Draw,
+                    Redraw,
                     BaseMatrix,
                     EigenValues_Preconditioner,
                     IdentityMatrix
