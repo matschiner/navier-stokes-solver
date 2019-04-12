@@ -32,22 +32,55 @@ class BP_Matrices():
         self.A = A
         self.B = B
         self.M_inv = M_inv
+
+        self.tmpA = self.A.CreateColVector()
+        self.krylA = A.CreateColVector()
+        self.krylA[:] = 0
+
+        self.tmpB = self.B.CreateRowVector()
+        self.krylB = B.CreateRowVector()
+        self.krylB[:] = 0
+
         self.tmp0 = A.CreateColVector()
         self.tmp1 = A0_inv.CreateColVector()
         self.tmp2 = A.CreateColVector()
         self.tmp3 = B.CreateColVector()
+        self.tmp4 = self.tmp1.CreateVector()
+        self.tmp5 = self.tmp1.CreateVector()
         self.Cinv_K = Matrix_CInv_K(self)
         self.K = Matrix_K(self)
 
+        self.u = A.CreateRowVector()
+        self.v = B.CreateColVector()
+
     def update(self, s):
-        u = s[0]
-        v = s[1]
-        self.tmp0.data = self.A * u + self.B.T * v
-        self.tmp1.data = self.A0_inv * self.tmp0
+        self.u.data = s[0]
+        self.v.data = s[1]
+
+        self.tmpA.data = self.A * self.u
+        self.tmpB.data = self.B.T * self.v
+
+        self.krylA += self.tmpA
+        self.krylB += self.tmpB
+
+        self.tmp0.data = self.tmpA + self.tmpB  # A u + B.T v
+
+        self.tmp1.data = self.A0_inv * self.tmp0  # A0^-1 (A u + B.T v)
         self.tmp2.data = self.A * self.tmp1
-        tmp4 = self.tmp1.CreateVector()
-        tmp4.data = self.tmp1 - u
-        self.tmp3.data = self.B * tmp4
+        self.tmp4.data = self.tmp1 - self.u
+        self.tmp3.data = self.B * self.tmp4
+        self.tmp5.data = self.tmp1 - self.tmp0
+
+    def K_Inner(self, kryl=False, wd=0):
+        tmp = InnerProduct(self.krylA if kryl else self.tmpA, self.tmp1) - InnerProduct(self.u, self.tmp0) + \
+              InnerProduct(self.krylB if kryl else self.tmpB, self.tmp4)
+
+        return tmp
+
+    def KCK_Inner(self, kryl=False):
+        tmp = InnerProduct(self.krylA if kryl else self.tmpA, self.tmp1) + \
+              InnerProduct(self.krylB if kryl else self.tmpB, self.tmp4)
+        return tmp
 
 
 def BramblePasciakCG(matA, matB, matC, f, g, preA_unscaled, preM, sol=None, tol=1e-6, maxsteps=100, printrates=True,
@@ -117,7 +150,7 @@ def BramblePasciakCG(matA, matB, matC, f, g, preA_unscaled, preM, sol=None, tol=
 
     d = rhs.CreateVector()
     w = rhs.CreateVector()
-    w_old = rhs.CreateVector()
+    v = rhs.CreateVector()
     s = rhs.CreateVector()
 
     MatOp = BP_Matrices(preA, matA, matB, preM)
@@ -142,22 +175,23 @@ def BramblePasciakCG(matA, matB, matC, f, g, preA_unscaled, preM, sol=None, tol=
 
     if wdn == 0:
         return u
-
+    wdn_2 = 0
     for it in range(maxsteps):
 
         MatOp.update(s)
-        w_old.data = w
 
-        w.data = MatOp.K * s
+        v.data = MatOp.K * s
         wd = wdn
-        as_s = InnerProduct(s, w)
-        alpha = wd / as_s
+        # as_s = InnerProduct(s, v)
+        alpha = wd / MatOp.K_Inner()
 
         u.data += alpha * s
-        d.data += (-alpha) * w
-        w.data = w_old + (-alpha) * MatOp.Cinv_K * s
+        d.data += (-alpha) * v
+        w.data = w + (-alpha) * MatOp.Cinv_K * s
 
         wdn = InnerProduct(w, d)
+        wdn_2 += MatOp.KCK_Inner(w)
+        print("wdn", wdn, "wdn2", wdn_2)
         beta = wdn / wd
 
         s *= beta

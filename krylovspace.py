@@ -52,6 +52,7 @@ def CG(mat, rhs, pre=None, sol=None, tol=1e-12, maxsteps=100, printrates=True, i
     u = sol if sol else rhs.CreateVector()
     d = rhs.CreateVector()
     w = rhs.CreateVector()
+    w_old = rhs.CreateVector()
     s = rhs.CreateVector()
 
     if initialize:
@@ -70,6 +71,7 @@ def CG(mat, rhs, pre=None, sol=None, tol=1e-12, maxsteps=100, printrates=True, i
 
     for it in range(maxsteps):
         w.data = mat * s
+        w_old.data=w
         wd = wdn
         # as_s = InnerProduct (s, w)
         as_s = s.InnerProduct(w, conjugate=conjugate)
@@ -80,7 +82,7 @@ def CG(mat, rhs, pre=None, sol=None, tol=1e-12, maxsteps=100, printrates=True, i
         w.data = pre * d if pre else d
 
         # wdn = InnerProduct (w, d)
-        wdn = w.InnerProduct(d, conjugate=conjugate)
+        wdn = w_old.InnerProduct(d, conjugate=conjugate)
         beta = wdn / wd
 
         s *= beta
