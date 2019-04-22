@@ -1,3 +1,4 @@
 ng.ini
 *.trace
+*.trace.html
 __pycache__/
