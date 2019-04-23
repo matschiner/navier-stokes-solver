@@ -1,9 +1,11 @@
 """Profiling to compare Bramble Pasciak CG method with MinRes method"""
 
-import netgen.gui
+import pandas as pd
+# import netgen.gui
 from ngsolve import *
 from netgen.geom2d import SplineGeometry
 from ngsolve.ngstd import Timer
+from minres import MinRes
 from bramble_pasciak_cg import bramble_pasciak_cg
 from discretizations import taylor_hood, \
     P1_nonconforming_velocity_constant_pressure, \
@@ -38,11 +40,11 @@ def solve_with_min_res(a, b, preA, preS, gfu, gfp, f, g, tolerance, max_steps):
     with TaskManager(pajetrace=100 * 1000 * 1000):
         min_res_timer = Timer("MinRes")
         min_res_timer.Start()
-        solvers.MinRes(mat=K, pre=C, rhs=rhs, sol=sol, initialize=False,
-                       tol=tolerance, maxsteps=max_steps)
+        solution = MinRes(mat=K, pre=C, rhs=rhs, sol=sol, initialize=False,
+                          tol=tolerance, maxsteps=max_steps)
         min_res_timer.Stop()
         print("MinRes took", min_res_timer.time, "seconds")
-    return sol
+    return solution
 
 
 def solve(mesh, discretization, solver):
@@ -79,16 +81,47 @@ def solve(mesh, discretization, solver):
     uin_x = CoefficientFunction(1.5 * 4 * y * (0.41 - y) / (0.41 * 0.41))
     velocity_grid_function.components[0].Set(
         uin_x, definedon=mesh.Boundaries("inlet"))
-    solver(a.mat, b.mat, preA, preS, velocity_grid_function.vec, pressure_grid_function.vec, f.vec, g.vec,
-           tolerance=1e-7, max_steps=10000)
+    solution, errors = solver(a.mat, b.mat, preA, preS, velocity_grid_function.vec, pressure_grid_function.vec, f.vec, g.vec,
+                              tolerance=1e-7, max_steps=10000)
     Draw(CoefficientFunction(
         (velocity_grid_function.components[0], velocity_grid_function.components[1])), mesh, "velocity")
     Draw(pressure_grid_function)
-    return (velocity_grid_function, pressure_grid_function)
+    return (velocity_grid_function, pressure_grid_function, errors)
 
 
-mesh = create_mesh(net_width=0.1)
-discretization = P1_nonconforming_velocity_constant_pressure()
-solve(mesh, discretization, solve_with_bramble_pasciak_cg)
-solve(mesh, discretization, solve_with_min_res)
-input("")
+net_widths = [0.01]
+discretizations = {
+    "P1nc, P0": P1_nonconforming_velocity_constant_pressure(),
+    "mini": mini(),
+    "P2, P0": P2_velocity_constant_pressure(),
+    "P2+, P1": P2_velocity_with_cubic_bubbles_linear_pressure(),
+    "taylor hood 2": taylor_hood(2),
+    "taylor hood 3": taylor_hood(3),
+    # "P2, P1": P2_velocity_linear_pressure()
+}
+solvers = {
+    "bramble pasciak cg": solve_with_bramble_pasciak_cg,
+    "minres": solve_with_min_res
+}
+
+error_frames = []
+
+for net_width in net_widths:
+    mesh = create_mesh(net_width=net_width)
+    for discretization_name, discretization in discretizations.items():
+        for solver_name, solver in solvers.items():
+            message = ", ".join(
+                [discretization_name, solver_name, "h=" + str(net_width)])
+            print("solving with", message)
+            _, _, errors = solve(mesh, discretization, solver)
+            error_frame = pd.DataFrame({
+                'net_width': net_width,
+                'discretization': discretization_name,
+                'solver': solver_name,
+                'iteration': range(len(errors)),
+                'error': errors
+            })
+            error_frames.append(error_frame)
+
+data = pd.concat(error_frames, ignore_index=True)
+data.to_csv("errors.csv")

@@ -100,6 +100,7 @@ def bramble_pasciak_cg(a_matrix, b_matrix, c_matrix, pre_a, pre_schur_complement
     full_preconditioned_residuum.data = temp_1
 
     current_residual_error_squared = InnerProduct(temp_1, residuum)
+    errors = []
 
     for iteration in range(max_steps):
         iteration_timer = Timer(
@@ -109,6 +110,7 @@ def bramble_pasciak_cg(a_matrix, b_matrix, c_matrix, pre_a, pre_schur_complement
         err = sqrt(abs(current_residual_error_squared))
         if print_rates:
             print("it = ", iteration, " err = ", err)
+        errors.append(err)
         if err < tolerance:
             iteration_timer.Stop()
             break
@@ -139,4 +141,4 @@ def bramble_pasciak_cg(a_matrix, b_matrix, c_matrix, pre_a, pre_schur_complement
 
     timer.Stop()
     print("Bramble Pasciak CG took", timer.time, "seconds")
-    return solution
+    return (solution, errors)
