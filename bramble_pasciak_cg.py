@@ -109,7 +109,7 @@ def bramble_pasciak_cg(a_matrix, b_matrix, c_matrix, pre_a, pre_schur_complement
 
         err = sqrt(abs(current_residual_error_squared))
         if print_rates:
-            print("it = ", iteration, " err = ", err)
+            print("\rit = ", iteration, " err = ", err, " " * 20, end="")
         errors.append(err)
         if err < tolerance:
             iteration_timer.Stop()
@@ -137,8 +137,8 @@ def bramble_pasciak_cg(a_matrix, b_matrix, c_matrix, pre_a, pre_schur_complement
 
         iteration_timer.Stop()
     else:
-        print("Warning: CG did not converge to TOL")
+        print("\nWarning: CG did not converge to TOL")
 
     timer.Stop()
-    print("Bramble Pasciak CG took", timer.time, "seconds")
+    print("\nBramble Pasciak CG took", timer.time, "seconds")
     return (solution, errors)

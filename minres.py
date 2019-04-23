@@ -77,7 +77,7 @@ def MinRes(mat, rhs, pre=None, sol=None, maxsteps=100, printrates=True, initiali
     ResNorm_old = gamma
 
     if (printrates):
-        print("it = ", 0, " err = ", ResNorm)
+        print("\rit = ", 0, " err = ", ResNorm, " " * 20, end="")
 
     eta_old = gamma
     c_old = 1
@@ -120,7 +120,7 @@ def MinRes(mat, rhs, pre=None, sol=None, maxsteps=100, printrates=True, initiali
         # update of residuum
         ResNorm = abs(s_new) * ResNorm_old
         if (printrates):
-            print("it = ", k, " err = ", ResNorm)
+            print("\rit = ", k, " err = ", ResNorm, " " * 20, end="")
         errors.append(ResNorm)
         if ResNorm < tol:
             break
@@ -142,6 +142,7 @@ def MinRes(mat, rhs, pre=None, sol=None, maxsteps=100, printrates=True, initiali
         gamma = gamma_new
         ResNorm_old = ResNorm
     else:
-        print("Warning: MinRes did not converge to TOL")
+        print("\nWarning: MinRes did not converge to TOL")
+    print("\n")
 
     return (u, errors)

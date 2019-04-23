@@ -54,3 +54,24 @@ def mini():
         return (FESpace([velocity_space, velocity_space]),
                 H1(mesh, order=1))
     return discretization
+
+
+def bdm_hybrid(order, penalty, hodivfree=False):
+    def discretization(mesh, velocity_dirichlet):
+        velocity_space = HDiv(
+            mesh, order=order, dirichlet=velocity_dirichlet, hodivfree=hodivfree)
+        velocity_facet_space = VectorFacet(
+            mesh, order=order, dirichlet=velocity_dirichlet)
+        pressure_space = L2(mesh, order=0 if hodivfree else (order - 1))
+        return (FESpace([velocity_space, velocity_facet_space]), pressure_space)
+    return discretization
+
+
+def hcurldiv(order, raviart_thomas=True):
+    def discretization(mesh, velocity_dirichlet, velocity_neumann):
+        velocity_space = HDiv(mesh, order=order,
+                              dirichlet=velocity_dirichlet, RT=raviart_thomas)
+        V2 = HCurlDiv(mesh, order=order, dirichlet=velocity_neumann)
+        pressure_space = L2(mesh, order=order)
+        return (FESpace([velocity_space, V2]), pressure_space)
+    return discretization
