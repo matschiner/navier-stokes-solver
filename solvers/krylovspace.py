@@ -88,7 +88,7 @@ def CG(mat, rhs, pre=None, sol=None, tol=1e-12, maxsteps=100, printrates=True, i
 
         err = sqrt(abs(wd))
         if printrates:
-            print("\rit = ", it, " err = ", err, end="")
+            print("\rit = ", it, " err = ", err," "*20, end="")
         if err < tol * err0:
             need_its = it
             break

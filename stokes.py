@@ -1,11 +1,7 @@
 from ngsolve.la import *
-from ngsolve.la import EigenValues_Preconditioner
-from math import sqrt
+from solvers.krylovspace import *
+from solvers.bramblepasciak import BramblePasciakCG as BPCG_Max
 from ngsolve import *
-from ngsolve.ngstd import Timer
-from krylovspace import *
-from solvers import BramblePasciakCG as BPCG_Max
-
 #ngsglobals.msg_level = 0
 
 # viscosity
@@ -34,7 +30,7 @@ p, q = Q.TnT()
 a = BilinearForm(V)
 a += SymbolicBFI(InnerProduct(grad(u), grad(v)))
 
-preA = Preconditioner(a, 'local')
+preA = Preconditioner(a, 'bddc')
 
 b = BilinearForm(trialspace=V, testspace=Q)
 b += SymbolicBFI(div(u) * q)
