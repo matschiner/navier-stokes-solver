@@ -173,4 +173,4 @@ def BramblePasciakCG(matA, matB, matC, f, g, preA_unscaled, preM, sol=None, tol=
 
     timer.Stop()
     print("\n")
-    return k
+    return it

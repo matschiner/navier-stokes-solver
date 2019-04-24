@@ -416,7 +416,7 @@ def MinRes(mat, rhs, pre=None, sol=None, maxsteps=100, printrates=True, initiali
         print("Warning: MinRes did not converge to TOL")
     print("\n")
 
-    return u
+    return u, k
 
 
 def PreconditionedRichardson(a, rhs, pre=None, freedofs=None, maxit=100, tol=1e-8, dampfactor=1.0, printing=True):
