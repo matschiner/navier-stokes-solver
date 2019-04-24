@@ -74,6 +74,7 @@ def MinRes(mat, rhs, pre=None, sol=None, maxsteps=100, printrates=True, initiali
     v.data = 1 / gamma * v
 
     ResNorm = gamma
+    err0 = ResNorm
     ResNorm_old = gamma
 
     if (printrates):
@@ -91,7 +92,7 @@ def MinRes(mat, rhs, pre=None, sol=None, maxsteps=100, printrates=True, initiali
     w[:] = 0.0
 
     k = 1
-    errors = [gamma]
+    errors = [err0 / err0]
     while (k < maxsteps + 1 and ResNorm > tol):
         mz.data = mat * z
         delta = InnerProduct(mz, z)
@@ -120,9 +121,9 @@ def MinRes(mat, rhs, pre=None, sol=None, maxsteps=100, printrates=True, initiali
         # update of residuum
         ResNorm = abs(s_new) * ResNorm_old
         if (printrates):
-            print("\rit = ", k, " err = ", ResNorm, " " * 20, end="")
-        errors.append(ResNorm)
-        if ResNorm < tol:
+            print("\rit =", k, "rel err =", ResNorm / err0, "abs err =", ResNorm, " " * 20, end="")
+        errors.append(ResNorm / err0)
+        if ResNorm < tol * err0:
             break
         k += 1
 

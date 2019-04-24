@@ -67,6 +67,17 @@ def bdm_hybrid(order, penalty, hodivfree=False):
     return discretization
 
 
+def rt_hybrid(order, penalty, hodivfree=False):
+    def discretization(mesh, velocity_dirichlet):
+        velocity_space = HDiv(
+            mesh, order=order, dirichlet=velocity_dirichlet, hodivfree=hodivfree, RT=True)
+        velocity_facet_space = VectorFacet(
+            mesh, order=order, dirichlet=velocity_dirichlet)
+        pressure_space = L2(mesh, order=0 if hodivfree else (order - 1))
+        return (FESpace([velocity_space, velocity_facet_space]), pressure_space)
+    return discretization
+
+
 def hcurldiv(order, raviart_thomas=True):
     def discretization(mesh, velocity_dirichlet, velocity_neumann):
         velocity_space = HDiv(mesh, order=order,

@@ -14,6 +14,7 @@ from discretizations import taylor_hood, \
     P2_velocity_with_cubic_bubbles_linear_pressure, \
     mini, \
     bdm_hybrid, \
+    rt_hybrid, \
     hcurldiv
 
 
@@ -233,9 +234,11 @@ methods = {'mixed': {'solve': solve,
                      }},
            'hybrid_dg': {'solve': solve_hybrid,
                          'discretizations': {
-                             "BDM 0": bdm_hybrid(0, 10),
-                             "BDM 1": bdm_hybrid(1, 10),
-                             "BDM 2": bdm_hybrid(2, 10),
+                             "HDG BDM 1": bdm_hybrid(1, 10),
+                             "HDG BDM 2": bdm_hybrid(2, 10),
+                             "HDG RT 0": rt_hybrid(0, 10),
+                             "HDG RT 1": rt_hybrid(1, 10),
+                             "HDG RT 2": rt_hybrid(2, 10)
                          }},
            'hcurldiv': {'solve': solve_hcurldiv,
                         'discretizations': {

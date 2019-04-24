@@ -17,8 +17,8 @@ def plot_error_over_iterations(data, net_width, discretization):
                  .get_group((net_width, discretization))\
                  .pivot(index='iteration', columns='solver', values='error')
     axis = errors.plot(logy=True)
-    axis.set_ylabel("error")
-    axis.set_title(f"error over iterations (h={net_width}, {discretization})")
+    axis.set_ylabel("relative error")
+    axis.set_title(f"relative error over iterations (h={net_width}, {discretization})")
 
 
 def plot_run_time(data, net_width):
@@ -33,5 +33,6 @@ def plot_run_time(data, net_width):
 data = pd.read_csv("errors.csv", index_col=0)
 plot_iterations(data, net_width=0.01)
 plot_run_time(data, net_width=0.01)
-plot_error_over_iterations(data, net_width=0.01, discretization='BDM 2')
+plot_error_over_iterations(
+    data, net_width=0.01, discretization='HDG BDM 2')
 plt.show()
