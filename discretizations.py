@@ -73,5 +73,5 @@ def hcurldiv(order, raviart_thomas=True):
                               dirichlet=velocity_dirichlet, RT=raviart_thomas)
         V2 = HCurlDiv(mesh, order=order, dirichlet=velocity_neumann)
         pressure_space = L2(mesh, order=order)
-        return (FESpace([velocity_space, V2]), pressure_space)
+        return (velocity_space, V2, pressure_space)
     return discretization

@@ -21,8 +21,17 @@ def plot_error_over_iterations(data, net_width, discretization):
     axis.set_title(f"error over iterations (h={net_width}, {discretization})")
 
 
+def plot_run_time(data, net_width):
+    run_time = data.groupby('net_width').get_group(net_width)\
+                   .groupby(['discretization', 'solver']).nth(0)\
+                   .unstack().run_time
+    axis = run_time.plot.bar(rot=0)
+    axis.set_ylabel("run time (s)")
+    axis.set_title(f"run time (s) by discretization and solver (h={net_width})")
+
+
 data = pd.read_csv("errors.csv", index_col=0)
 plot_iterations(data, net_width=0.01)
-plot_error_over_iterations(
-    data, net_width=0.01, discretization='taylor hood 3')
+plot_run_time(data, net_width=0.01)
+plot_error_over_iterations(data, net_width=0.01, discretization='BDM 2')
 plt.show()

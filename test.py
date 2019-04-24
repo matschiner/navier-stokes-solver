@@ -1,7 +1,7 @@
 """Profiling to compare Bramble Pasciak CG method with MinRes method"""
 
 import pandas as pd
-#import netgen.gui
+import netgen.gui
 from ngsolve import *
 from netgen.geom2d import SplineGeometry
 from ngsolve.ngstd import Timer
@@ -29,9 +29,15 @@ def create_mesh(net_width):
 
 def solve_with_bramble_pasciak_cg(a_matrix, b_matrix, pre_a, pre_schur_complement, gfu, gfp, f, g, tolerance, max_steps):
     sol = BlockVector([gfu, gfp])
-    with TaskManager(pajetrace=100 * 1000 * 1000):
-        return bramble_pasciak_cg(a_matrix, b_matrix, None, pre_a, pre_schur_complement, f, g, sol,
-                                  tolerance=tolerance, max_steps=max_steps)
+    with TaskManager():
+        bramble_pasciak_cg_timer = Timer("BramblePasciakCG")
+        bramble_pasciak_cg_timer.Start()
+        (solution, errors) = bramble_pasciak_cg(a_matrix, b_matrix, None, pre_a, pre_schur_complement, f, g, sol,
+                                                tolerance=tolerance, max_steps=max_steps)
+        bramble_pasciak_cg_timer.Stop()
+        print("Bramble Pasciak CG took",
+              bramble_pasciak_cg_timer.time, "seconds")
+        return (solution, errors, bramble_pasciak_cg_timer.time)
 
 
 def solve_with_min_res(a, b, preA, preS, gfu, gfp, f, g, tolerance, max_steps):
@@ -39,14 +45,14 @@ def solve_with_min_res(a, b, preA, preS, gfu, gfp, f, g, tolerance, max_steps):
     C = BlockMatrix([[preA, None], [None, preS]])
     rhs = BlockVector([f, g])
     sol = BlockVector([gfu, gfp])
-    with TaskManager(pajetrace=100 * 1000 * 1000):
+    with TaskManager():
         min_res_timer = Timer("MinRes")
         min_res_timer.Start()
-        solution = MinRes(mat=K, pre=C, rhs=rhs, sol=sol, initialize=False,
-                          tol=tolerance, maxsteps=max_steps)
+        (solution, errors) = MinRes(mat=K, pre=C, rhs=rhs, sol=sol, initialize=False,
+                                    tol=tolerance, maxsteps=max_steps)
         min_res_timer.Stop()
         print("MinRes took", min_res_timer.time, "seconds")
-    return solution
+        return (solution, errors, min_res_timer.time)
 
 
 def create_iterative_solver_factory(solver, a_pre, schur_complement_pre, tolerance, max_steps):
@@ -95,12 +101,12 @@ def solve(mesh, discretization, solver_factory):
     velocity_grid_function.components[0].Set(
         uin_x, definedon=mesh.Boundaries("inlet"))
 
-    solution, errors = solver(
+    solution, errors, time = solver(
         a.mat, b.mat, velocity_grid_function.vec, pressure_grid_function.vec, f.vec, g.vec)
     Draw(CoefficientFunction((velocity_grid_function.components[0],
                               velocity_grid_function.components[1])), mesh, "velocity")
     Draw(pressure_grid_function)
-    return (velocity_grid_function, pressure_grid_function, errors)
+    return (velocity_grid_function, pressure_grid_function, errors, time)
 
 
 def solve_hybrid(mesh, discretization, solver_factory):
@@ -127,8 +133,8 @@ def solve_hybrid(mesh, discretization, solver_factory):
                      element_boundary=True)
     a += SymbolicBFI(InnerProduct(gradv * n, tang(uhat - u)),
                      element_boundary=True)
-    a += SymbolicBFI(alpha * order * order / h *
-                     InnerProduct(tang(vhat - v), tang(uhat - u)), element_boundary=True)
+    a += SymbolicBFI(alpha * order * order / h
+                     * InnerProduct(tang(vhat - v), tang(uhat - u)), element_boundary=True)
 
     b = BilinearForm(trialspace=V, testspace=Q)
     b += SymbolicBFI(div(u) * q)
@@ -155,62 +161,57 @@ def solve_hybrid(mesh, discretization, solver_factory):
     velocity_grid_function.components[0].Set(
         uin, definedon=mesh.Boundaries("inlet"))
 
-    solution, errors = solver(
+    solution, errors, time = solver(
         a.mat, b.mat, velocity_grid_function.vec, pressure_grid_function.vec, f.vec, g.vec)
     Draw(velocity_grid_function.components[0], mesh, "velocity")
     Draw(velocity_grid_function.components[1], mesh, "velocity_facets")
     Draw(pressure_grid_function)
-    return (velocity_grid_function, pressure_grid_function, errors)
+    return (velocity_grid_function, pressure_grid_function, errors, time)
 
 
 def solve_hcurldiv(mesh, discretization, solver_factory):
-    V, Q = discretization(
+    V, S, Q = discretization(
         mesh, velocity_dirichlet='wall|inlet|cyl', velocity_neumann='outlet')
 
-    (u, sigma), (v, tau) = V.TnT()
-    p, q = Q.TnT()
+    X = FESpace([V, S, Q])
+    (u, sigma, p), (v, tau, q) = X.TnT()
 
     n = specialcf.normal(mesh.dim)
 
-    a = BilinearForm(V, symmetric=True)
+    a = BilinearForm(X, symmetric=True)
     a += SymbolicBFI(InnerProduct(sigma, tau))
     a += SymbolicBFI(div(sigma) * v + div(tau) * u)
-    a += SymbolicBFI(-(sigma * n) * n * (v * n) - (tau * n)
-                     * n * (u * n), element_boundary=True)
-
-    b = BilinearForm(trialspace=V, testspace=Q)
-    b += SymbolicBFI(div(u) * q)
-
-    mp = BilinearForm(Q)
-    mp += SymbolicBFI(p * q)
-
-    solver = solver_factory(FESpace([V, Q]), a, b, mp)
+    a += SymbolicBFI(-(sigma * n) * n * (v * n) - (tau * n) *
+                     n * (u * n), element_boundary=True)
+    a += SymbolicBFI(div(u) * q + div(v) * p)
 
     a.Assemble()
-    b.Assemble()
-    mp.Assemble()
 
-    f = LinearForm(V)
-    f += SymbolicLFI((x - 0.5) * v[1])
+    f = LinearForm(X)
+    f += SymbolicLFI(CoefficientFunction((0, x - 0.5)) * v)
     f.Assemble()
 
-    g = LinearForm(Q)
-    g.Assemble()
-
-    velocity_grid_function = GridFunction(V, name="velocity")
-    pressure_grid_function = GridFunction(Q, name="pressure")
+    grid_function = GridFunction(X)
     uin = CoefficientFunction((1.5 * 4 * y * (0.41 - y) / (0.41 * 0.41), 0))
-    velocity_grid_function.components[0].Set(
-        uin, definedon=mesh.Boundaries("inlet"))
+    grid_function.components[0].Set(uin, definedon=mesh.Boundaries("inlet"))
 
-    solution, errors = solver(
-        a.mat, b.mat, velocity_grid_function.vec, pressure_grid_function.vec, f.vec, g.vec)
-    Draw(velocity_grid_function.components[0], mesh, "velocity")
-    Draw(pressure_grid_function)
-    return (velocity_grid_function, pressure_grid_function, errors)
+    direct_timer = Timer("Direct Solver")
+    direct_timer.Start()
+    res = grid_function.vec.CreateVector()
+    res.data = f.vec - a.mat * grid_function.vec
+    inv = a.mat.Inverse(freedofs=X.FreeDofs(), inverse="umfpack")
+    grid_function.vec.data += inv * res
+    direct_timer.Stop()
+
+    velocity = CoefficientFunction(grid_function.components[0])
+    pressure = CoefficientFunction(grid_function.components[2])
+
+    Draw(velocity, mesh, "velocity")
+    Draw(pressure, mesh, "pressure")
+    return (velocity, pressure, [], direct_timer.time)
 
 
-net_widths = [0.1]
+net_widths = [0.1, 0.05, 0.025, 0.01]
 solver_factories = {
     "bramble pasciak cg": create_iterative_solver_factory(solve_with_bramble_pasciak_cg,
                                                           a_pre='bddc', schur_complement_pre='local',
@@ -218,37 +219,40 @@ solver_factories = {
     "minres": create_iterative_solver_factory(solve_with_min_res,
                                               a_pre='bddc', schur_complement_pre='local',
                                               tolerance=1e-7, max_steps=10000),
+
+
 }
 methods = {'mixed': {'solve': solve,
                      'discretizations': {
-                         # "P1nc, P0": P1_nonconforming_velocity_constant_pressure(),
-                         # "mini": mini(),
-                         # "P2, P0": P2_velocity_constant_pressure(),
-                         # "P2+, P1": P2_velocity_with_cubic_bubbles_linear_pressure(),
-                         # "taylor hood 2": taylor_hood(2),
-                         # "taylor hood 3": taylor_hood(3),
+                         "P1nc, P0": P1_nonconforming_velocity_constant_pressure(),
+                         "mini": mini(),
+                         "P2, P0": P2_velocity_constant_pressure(),
+                         "P2+, P1": P2_velocity_with_cubic_bubbles_linear_pressure(),
+                         "taylor hood 2": taylor_hood(2),
+                         "taylor hood 3": taylor_hood(3),
                      }},
            'hybrid_dg': {'solve': solve_hybrid,
                          'discretizations': {
-                             # "BDM 0": bdm_hybrid(0, 10),
-                             # "BDM 1": bdm_hybrid(1, 10),
-                             # "BDM 2": bdm_hybrid(2, 10),
+                             "BDM 0": bdm_hybrid(0, 10),
+                             "BDM 1": bdm_hybrid(1, 10),
+                             "BDM 2": bdm_hybrid(2, 10),
                          }},
            'hcurldiv': {'solve': solve_hcurldiv,
                         'discretizations': {
-                            "HCurlDiv RT 0": hcurldiv(2),
+                            # "HCurlDiv RT 0": hcurldiv(0),
                             # "HCurlDiv RT 1": hcurldiv(1),
                             # "HCurlDiv RT 2": hcurldiv(2)
                         }}}
 
 
-def error_frame(net_width, discretization_name, solver_name, errors):
+def error_frame(net_width, discretization_name, solver_name, errors, run_time):
     return pd.DataFrame({
         'net_width': net_width,
         'discretization': discretization_name,
         'solver': solver_name,
         'iteration': range(len(errors)),
-        'error': errors
+        'error': errors,
+        'run_time': run_time
     })
 
 
@@ -263,10 +267,11 @@ for net_width in net_widths:
                 message = ", ".join(
                     [discretization_name, solver_name, "h=" + str(net_width)])
                 print("solving with", message)
-                _, _, errors = solve_method(mesh, discretization, solver)
+                _, _, errors, run_time = solve_method(
+                    mesh, discretization, solver)
+                print("\n")
                 error_frames.append(error_frame(
-                    net_width, discretization_name, solver_name, errors))
+                    net_width, discretization_name, solver_name, errors, run_time))
 
 data = pd.concat(error_frames, ignore_index=True)
 data.to_csv("errors.csv")
-input("")

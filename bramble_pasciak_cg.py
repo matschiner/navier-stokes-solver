@@ -65,8 +65,6 @@ class MatrixAB(BaseMatrix):
 def bramble_pasciak_cg(a_matrix, b_matrix, c_matrix, pre_a, pre_schur_complement,
                        upper_rhs, lower_rhs, solution=None,
                        tolerance=1e-12, max_steps=1000, print_rates=True):
-    timer = Timer("BramblePasciakCG")
-    timer.Start()
     k = 1 / min(EigenValues_Preconditioner(mat=a_matrix, pre=pre_a)) + 1e-3
     print("scale factor: ", k)
     scaled_pre_a = ScaledPreconditioner(k, a_matrix, pre_a)
@@ -139,6 +137,5 @@ def bramble_pasciak_cg(a_matrix, b_matrix, c_matrix, pre_a, pre_schur_complement
     else:
         print("\nWarning: CG did not converge to TOL")
 
-    timer.Stop()
-    print("\nBramble Pasciak CG took", timer.time, "seconds")
+    print("")
     return (solution, errors)

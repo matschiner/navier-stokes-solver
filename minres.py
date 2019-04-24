@@ -143,6 +143,6 @@ def MinRes(mat, rhs, pre=None, sol=None, maxsteps=100, printrates=True, initiali
         ResNorm_old = ResNorm
     else:
         print("\nWarning: MinRes did not converge to TOL")
-    print("\n")
+    print("")
 
     return (u, errors)
