@@ -6,6 +6,8 @@ class MultiplicativePrecond(BaseMatrix):
         self.pre_loworder = pre_loworder
         self.A = A
 
+
+
     def Mult(self, x, w):
         w[:] = 0.0
         self.smoother.Smooth(w, x)
@@ -13,7 +15,8 @@ class MultiplicativePrecond(BaseMatrix):
         tmp.data = x - self.A * w
         w.data += self.pre_loworder * tmp
         self.smoother.SmoothBack(w, x)
-
+    def CreateColVector(self):
+        return self.A.CreateColVector()
     def Height(self):
         return self.smoother.height
 

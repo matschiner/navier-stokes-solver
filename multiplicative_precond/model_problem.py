@@ -17,7 +17,7 @@ gfu_test = GridFunction(fes)
 
 preJpoint = a.mat.CreateSmoother(fes.FreeDofs())
 
-print("multiplicateive Precond")
+print("multiplicative Precond")
 
 vertexdofs = BitArray(fes.ndof)
 vertexdofs[:] = False
