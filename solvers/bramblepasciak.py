@@ -96,6 +96,8 @@ def BramblePasciakCG(matA, matB, matC, f, g, preA_unscaled, preM, sol=None, tol=
     lams = EigenValues_Preconditioner(mat=matA, pre=preA_unscaled)
     print("min", min(lams), "max", max(lams))
     k = 1. / min(lams) + 1e-3
+
+    print("condition",max(lams)/min(lams))
     print("scale factor", k)
     preA = k * preA_unscaled
 
