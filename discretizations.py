@@ -8,7 +8,7 @@ def taylor_hood(order):
         velocity_space = H1(mesh, order=order, dirichlet=velocity_dirichlet)
         return (FESpace([velocity_space, velocity_space]),
                 H1(mesh, order=order - 1))
-    return discretization
+    return (discretization, order)
 
 
 def P1_nonconforming_velocity_constant_pressure():
@@ -17,7 +17,7 @@ def P1_nonconforming_velocity_constant_pressure():
             'nonconforming', mesh, order=1, dirichlet=velocity_dirichlet)
         return (FESpace([velocity_space, velocity_space]),
                 L2(mesh, order=0))
-    return discretization
+    return (discretization, 1)
 
 
 def P2_velocity_constant_pressure():
@@ -25,7 +25,7 @@ def P2_velocity_constant_pressure():
         velocity_space = H1(mesh, order=2, dirichlet=velocity_dirichlet)
         return (FESpace([velocity_space, velocity_space]),
                 L2(mesh, order=0))
-    return discretization
+    return (discretization, 2)
 
 
 def P2_velocity_linear_pressure():
@@ -33,7 +33,7 @@ def P2_velocity_linear_pressure():
         velocity_space = H1(mesh, order=2, dirichlet=velocity_dirichlet)
         return (FESpace([velocity_space, velocity_space]),
                 L2(mesh, order=1))
-    return discretization
+    return (discretization, 2)
 
 
 def P2_velocity_with_cubic_bubbles_linear_pressure():
@@ -43,7 +43,7 @@ def P2_velocity_with_cubic_bubbles_linear_pressure():
         velocity_space.Update()
         return (FESpace([velocity_space, velocity_space]),
                 L2(mesh, order=1))
-    return discretization
+    return (discretization, 2)
 
 
 def mini():
@@ -53,7 +53,7 @@ def mini():
         velocity_space.Update()
         return (FESpace([velocity_space, velocity_space]),
                 H1(mesh, order=1))
-    return discretization
+    return (discretization, 1)
 
 
 def bdm_hybrid(order, penalty, hodivfree=False):
@@ -64,7 +64,7 @@ def bdm_hybrid(order, penalty, hodivfree=False):
             mesh, order=order, dirichlet=velocity_dirichlet)
         pressure_space = L2(mesh, order=0 if hodivfree else (order - 1))
         return (FESpace([velocity_space, velocity_facet_space]), pressure_space)
-    return discretization
+    return (discretization, order)
 
 
 def rt_hybrid(order, penalty, hodivfree=False):
@@ -75,7 +75,7 @@ def rt_hybrid(order, penalty, hodivfree=False):
             mesh, order=order, dirichlet=velocity_dirichlet)
         pressure_space = L2(mesh, order=0 if hodivfree else (order - 1))
         return (FESpace([velocity_space, velocity_facet_space]), pressure_space)
-    return discretization
+    return (discretization, order)
 
 
 def hcurldiv(order, raviart_thomas=True):
@@ -85,4 +85,4 @@ def hcurldiv(order, raviart_thomas=True):
         V2 = HCurlDiv(mesh, order=order, dirichlet=velocity_neumann)
         pressure_space = L2(mesh, order=order)
         return (velocity_space, V2, pressure_space)
-    return discretization
+    return (discretization, order)
