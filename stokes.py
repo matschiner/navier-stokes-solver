@@ -18,7 +18,7 @@ geo = SplineGeometry()
 geo.AddRectangle((0, 0), (2, 0.41), bcs=("wall", "outlet", "wall", "inlet"))
 geo.AddCircle((0.2, 0.2), r=0.05, leftdomain=0, rightdomain=1, bc="cyl")
 
-mesh = Mesh(geo.GenerateMesh(maxh=0.003))
+mesh = Mesh(geo.GenerateMesh(maxh=0.05))
 
 mesh.Curve(3)
 
@@ -143,7 +143,7 @@ def spaces_test(V, Q, precon="bddc"):
     sol2[0].data = gfu.vec
     sol2[1].data = gfp.vec
 
-    with TaskManager(pajetrace=100 * 1000 * 1000):
+    with TaskManager():#pajetrace=100 * 1000 * 1000):
         bramblePasciakTimer.Start()
         results["nits_bpcg"] = BPCG_Max(a.mat, b.mat, None, f.vec, g.vec, preA, preM, sol2, initialize=False, tol=1e-9, maxsteps=100000, rel_err=True)
         bramblePasciakTimer.Stop()
@@ -197,15 +197,15 @@ def spaces_test(V, Q, precon="bddc"):
     print("BramblePasciakCGMax took", round(bramblePasciakTimer.time, 4), "seconds")
     print("MinRes took", round(minResTimer.time, 4), "seconds")
 
-    sol2.data-=sol
-    print("difference",Norm(sol2))
+    sol2.data -= sol
+    print("difference", Norm(sol2))
     return results
 
 
 V, Q = elements(mesh).bubbled().setup()
 # spaces_test(V, Q)
-spaces_test(V, Q, precon="bddc")
-exit(0)
+#spaces_test(V, Q, precon="bddc")
+#exit(0)
 import pandas as pd
 
 data = pd.DataFrame()
@@ -223,4 +223,4 @@ for a in range(4):
         for precon_name in ["bddc", "multi"]:
             result = spaces_test(V, Q, precon=precon_name)
             data = data.append({"method": e, "ndofs": V.ndof + Q.ndof, "precon": precon_name, "vert": mesh.nv, **result}, ignore_index=True)
-            data.to_csv("bpcg_test_precons.csv")
+        data.to_csv("bpcg_test_precons.csv")

@@ -26,7 +26,7 @@ plt.show()
 data[["time_bpcg"]].unstack(level=0).plot()
 data[["time_minres", "time_bpcg"]].unstack(level=0).plot()
 
-data[data["precon"] == "bddc"][["time_minres", "time_bpcg"]].unstack(level=0).transpose().plot.bar(subplots=True, figsize=(25, 10), layout=(1, 4), stacked=True)  # .unstack(level=1).plot.bar(subplots=True, figsize=(25, 10),layout=(1,6))
+data[data["precon"] == "multi"][["time_minres", "time_bpcg"]].unstack(level=0).transpose().plot.bar(subplots=True, figsize=(25, 10), layout=(1, 4), stacked=True)  # .unstack(level=1).plot.bar(subplots=True, figsize=(25, 10),layout=(1,6))
 data[data["precon"] == "multi"][["time_bpcg"]].unstack(level=0).transpose().plot.bar(subplots=True, figsize=(25, 10), layout=(1, 4), stacked=True)  # .unstack(level=1).plot.bar(subplots=True, figsize=(25, 10),layout=(1,6))
 plt.show()
 

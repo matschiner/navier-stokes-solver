@@ -46,7 +46,7 @@ class elements:
 element_names = [a for a in filter(lambda x: "__" not in x and x not in ["setup", "mesh"], dir(elements(mesh)))]
 
 
-def spaces_test(V, Q, precon="bddc"):
+def spaces_test(V, Q, precon="bddc",block=True):
     results = {}
     V, Q = elements(mesh).nonconforming().setup()
 
@@ -72,14 +72,29 @@ def spaces_test(V, Q, precon="bddc"):
         a.Assemble()
         b.Assemble()
 
-        preJpoint = a.mat.CreateSmoother(V.FreeDofs())
-
         vertexdofs = BitArray(V.ndof)
         vertexdofs[:] = False
 
-        for vert in mesh.vertices:
-            for dofs_nr in V.GetDofNrs(vert):
-                vertexdofs[dofs_nr] = True
+        if (block):
+            # Block Jacobi
+            blocks = []
+            freedofs = V.FreeDofs(False)
+            for vert in mesh.vertices:
+                vdofs = set()
+                for edge in mesh[vert].edges:
+                    vdofs |= set(dof for dof in V.GetDofNrs(edge) if freedofs[dof])
+                for el in mesh[vert].faces:
+                    vdofs |= set(dof for dof in V.GetDofNrs(el) if freedofs[dof])
+                blocks.append(vdofs)
+
+            preJpoint = a.mat.CreateBlockSmoother(blocks)
+        # preJpoint = SymmetricGS(blockjac)
+        else:
+            preJpoint = a.mat.CreateSmoother(V.FreeDofs())
+
+        for d in range(V.ndof):
+            if V.CouplingType(d) == COUPLING_TYPE.WIREBASKET_DOF:
+                vertexdofs[d] = True
 
         vertexdofs &= V.FreeDofs()
 
@@ -152,6 +167,7 @@ for a in range(4):
         print("testing", e)
         V, Q = getattr(element, e)().setup()
 
-        result = spaces_test(V, Q)
-        data = data.append({"method": e, "ndofs": V.ndof + Q.ndof, "precon": "bddc", "vert": mesh.nv, **result}, ignore_index=True)
+        for precon in ["bddc","multi"]:
+            result = spaces_test(V, Q,precon=precon)
+            data = data.append({"method": e, "ndofs": V.ndof + Q.ndof, "precon": precon, "vert": mesh.nv, **result}, ignore_index=True)
         data.to_csv("bpcg_test_all_nc.csv")
