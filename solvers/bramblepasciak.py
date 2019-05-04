@@ -142,14 +142,15 @@ def BramblePasciakCG(matA, matB, matC, f, g, preA_unscaled, preM, sol=None, tol=
     timer_its = Timer("BPCG-Iterations")
     timer_its.Start()
 
+    matB_tranposed = matB.CreateTranspose()
 
     for it in range(maxsteps):
         if it == 0:
             matA_s0.data = matA * s[0]
-            z[0].data = matA_s0 # A*w_0_0
+            z[0].data = matA_s0  # A*w_0_0
         else:
             matA_s0.data = beta * matA_s0 + z_old[0] - alpha * tmp2
-        matB_s1.data = matB.T * s[1]
+        matB_s1.data = matB_tranposed * s[1]
         tmp0.data = matA_s0 + matB_s1
         tmp1.data = preA * tmp0
         tmp2.data = matA * tmp1
