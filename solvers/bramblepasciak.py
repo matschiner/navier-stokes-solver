@@ -66,7 +66,10 @@ def BramblePasciakCG(matA, matB, matC, f, g, preA_unscaled, preM, sol=None, tol=
     """
     timer_prep = Timer("BPCG-Preparation")
     timer_prep.Start()
-    lams = EigenValues_Preconditioner(mat=matA, pre=preA_unscaled)
+    timer_prepev = Timer("BPCG-Preparation-EV")
+    timer_prepev.Start()
+    lams = EigenValues_Preconditioner(mat=matA, pre=preA_unscaled, tol=1e-3)
+    timer_prepev.Stop()
     # print("min", min(lams), "max", max(lams))
     k = 1. / min(lams) + 1e-3
 

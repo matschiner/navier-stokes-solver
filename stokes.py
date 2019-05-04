@@ -18,7 +18,7 @@ geo = SplineGeometry()
 geo.AddRectangle((0, 0), (2, 0.41), bcs=("wall", "outlet", "wall", "inlet"))
 geo.AddCircle((0.2, 0.2), r=0.05, leftdomain=0, rightdomain=1, bc="cyl")
 
-mesh = Mesh(geo.GenerateMesh(maxh=0.01))
+mesh = Mesh(geo.GenerateMesh(maxh=0.003))
 
 mesh.Curve(3)
 
@@ -145,7 +145,7 @@ def spaces_test(V, Q, precon="bddc"):
 
     with TaskManager(pajetrace=100 * 1000 * 1000):
         bramblePasciakTimer.Start()
-        results["nits_bpcg"] = BPCG_Max(a.mat, b.mat, None, f.vec, g.vec, preA, preM, sol2, initialize=False, tol=1e-7, maxsteps=100000, rel_err=True)
+        results["nits_bpcg"] = BPCG_Max(a.mat, b.mat, None, f.vec, g.vec, preA, preM, sol2, initialize=False, tol=1e-9, maxsteps=100000, rel_err=True)
         bramblePasciakTimer.Stop()
         results["time_bpcg"] = bramblePasciakTimer.time
 
