@@ -90,7 +90,9 @@ def BramblePasciakCG(matA, matB, matC, f, g, preA_unscaled, preM, sol=None, tol=
 
     d = rhs.CreateVector()
     w = rhs.CreateVector()
-    w_old = rhs.CreateVector()
+    v = rhs.CreateVector()
+    z = rhs.CreateVector()
+    z_old = rhs.CreateVector()
     s = rhs.CreateVector()
 
     # MatOp = BP_Matrices(preA, matA, matB, preM)
@@ -101,6 +103,8 @@ def BramblePasciakCG(matA, matB, matC, f, g, preA_unscaled, preM, sol=None, tol=
     tmp2 = matA.CreateColVector()
     tmp3 = matB.CreateColVector()
     tmp4 = tmp1.CreateVector()
+    matA_s0 = matA.CreateColVector()
+    matB_s1 = matB.CreateRowVector()
 
     tmp0.data = matA * u[0] + matB.T * u[1]
     tmp1.data = preA * tmp0
@@ -138,34 +142,45 @@ def BramblePasciakCG(matA, matB, matC, f, g, preA_unscaled, preM, sol=None, tol=
     timer_its = Timer("BPCG-Iterations")
     timer_its.Start()
 
-    for it in range(maxsteps):
 
-        tmp0.data = matA * s[0] + matB.T * s[1]
+    for it in range(maxsteps):
+        if it == 0:
+            matA_s0.data = matA * s[0]
+            z[0].data = matA_s0 # A*w_0_0
+        else:
+            matA_s0.data = beta * matA_s0 + z_old[0] - alpha * tmp2
+        matB_s1.data = matB.T * s[1]
+        tmp0.data = matA_s0 + matB_s1
         tmp1.data = preA * tmp0
         tmp2.data = matA * tmp1
 
         tmp4.data = tmp1 - s[0]
         tmp3.data = matB * tmp4
 
-        w_old.data = w
+        z_old[0].data = z[0]
 
         # w.data = MatOp.K * s
-        w[0].data = tmp2 - tmp0
-        w[1].data = tmp3
+        v[0].data = tmp2 - tmp0
+        v[1].data = tmp3
 
         wd = wdn
-        as_s = InnerProduct(s, w)
+        as_s = InnerProduct(s, v)
+        # giving one (A,B) to the other side of the dot product
+        # as_s = InnerProduct(matA_s0, tmp1) - InnerProduct(s[0], tmp0) + InnerProduct(matB_s1, tmp4)
+
         alpha = wd / as_s
 
         u.data += alpha * s
-        d.data += (-alpha) * w
+        d.data += (-alpha) * v
 
         # w.data = w_old + (-alpha) * MatOp.Cinv_K * s
-        w[0].data = w_old[0] + (-alpha) * tmp1
-        w[1].data = w_old[1] + (-alpha) * preM * tmp3
+        w[0].data = w[0] + (-alpha) * tmp1
+        w[1].data = w[1] + (-alpha) * preM * tmp3
 
         wdn = InnerProduct(w, d)
         beta = wdn / wd
+
+        z[0].data -= alpha * tmp2
 
         s *= beta
         s.data += w

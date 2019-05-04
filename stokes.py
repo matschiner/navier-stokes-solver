@@ -143,7 +143,7 @@ def spaces_test(V, Q, precon="bddc"):
     sol2[0].data = gfu.vec
     sol2[1].data = gfp.vec
 
-    with TaskManager( pajetrace=100*1000*1000):
+    with TaskManager(pajetrace=100 * 1000 * 1000):
         bramblePasciakTimer.Start()
         results["nits_bpcg"] = BPCG_Max(a.mat, b.mat, None, f.vec, g.vec, preA, preM, sol2, initialize=False, tol=1e-7, maxsteps=100000, rel_err=True)
         bramblePasciakTimer.Stop()
@@ -156,7 +156,7 @@ def spaces_test(V, Q, precon="bddc"):
 
     with TaskManager():  # pajetrace=100*1000*1000):
         minResTimer.Start()
-        #tmp, results["nits_minres"] = MinRes(mat=K, pre=C, rhs=rhs, sol=sol, initialize=False, tol=1e-7, maxsteps=100000)
+        tmp, results["nits_minres"] = MinRes(mat=K, pre=C, rhs=rhs, sol=sol, initialize=False, tol=1e-7, maxsteps=100000)
         minResTimer.Stop()
         results["time_minres"] = minResTimer.time
 
@@ -197,12 +197,14 @@ def spaces_test(V, Q, precon="bddc"):
     print("BramblePasciakCGMax took", round(bramblePasciakTimer.time, 4), "seconds")
     print("MinRes took", round(minResTimer.time, 4), "seconds")
 
+    sol2.data-=sol
+    print("difference",Norm(sol2))
     return results
 
 
 V, Q = elements(mesh).bubbled().setup()
-#spaces_test(V, Q)
-spaces_test(V, Q,precon="multi")
+# spaces_test(V, Q)
+spaces_test(V, Q, precon="bddc")
 exit(0)
 import pandas as pd
 
