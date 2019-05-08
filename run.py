@@ -216,7 +216,7 @@ def solve_hcurldiv(mesh, discretization, solver_factory):
 
 
 def profiling_enabled():
-    '-p' in sys.argv[1:]
+    return '-p' in sys.argv[1:]
 
 
 def data_file():
@@ -265,16 +265,16 @@ def run(mesh_sizes, methods, solver_factories, data_file, profiling_enabled, pro
 mesh_sizes = [0.1]  # , 0.05, 0.025, 0.01]
 methods = {'mixed': {'solve': solve,
                      'discretizations': {
-                         "P1nc, P0": P1_nonconforming_velocity_constant_pressure(),
-                         "mini": mini(),
-                         "P2, P0": P2_velocity_constant_pressure(),
-                         "P2+, P1": P2_velocity_with_cubic_bubbles_linear_pressure(),
-                         "taylor hood 2": taylor_hood(2),
-                         "taylor hood 3": taylor_hood(3),
+                         # "P1nc, P0": P1_nonconforming_velocity_constant_pressure(),
+                         # "mini": mini(),
+                         # "P2, P0": P2_velocity_constant_pressure(),
+                         # "P2+, P1": P2_velocity_with_cubic_bubbles_linear_pressure(),
+                         # "taylor hood 2": taylor_hood(2),
+                         # "taylor hood 3": taylor_hood(3),
                      }},
            'hybrid_dg': {'solve': solve_hybrid,
                          'discretizations': {
-                             "HDG BDM 1": bdm_hybrid(1, 10),
+                             # "HDG BDM 1": bdm_hybrid(1, 10),
                              "HDG BDM 2": bdm_hybrid(2, 10),
                              # "HDG RT 0": rt_hybrid(0, 10),
                              # "HDG RT 1": rt_hybrid(1, 10),
@@ -282,7 +282,7 @@ methods = {'mixed': {'solve': solve,
                          }},
            'mcs': {'solve': solve_hcurldiv,
                    'discretizations': {
-                       "MCS RT 0": hcurldiv(0),
+                       # "MCS RT 0": hcurldiv(0),
                        # "MCS RT 1": hcurldiv(1),
                        # "MCS RT 2": hcurldiv(2)
                    }}}
@@ -290,11 +290,14 @@ solver_factories = {
     "bramble pasciak cg": create_iterative_solver_factory(solve_with_bramble_pasciak_cg,
                                                           a_pre='bddc', schur_complement_pre='local',
                                                           tolerance=1e-7, max_steps=10000),
-    "minres": create_iterative_solver_factory(solve_with_min_res,
-                                              a_pre='bddc', schur_complement_pre='local',
-                                              tolerance=1e-7, max_steps=10000)
+    # "minres": create_iterative_solver_factory(solve_with_min_res,
+    #                                          a_pre='bddc', schur_complement_pre='local',
+    #                                          tolerance=1e-7, max_steps=10000)
 }
 
-
+print("profiling_enabled:", profiling_enabled())
+print("data file:", data_file())
 run(mesh_sizes, methods, solver_factories,
     data_file(), profiling_enabled())
+
+input("press to quit")

@@ -65,8 +65,11 @@ class MatrixAB(BaseMatrix):
 def bramble_pasciak_cg(a_matrix, b_matrix, c_matrix, pre_a, pre_schur_complement,
                        upper_rhs, lower_rhs, solution=None,
                        tolerance=1e-12, max_steps=1000, print_rates=True):
+    ev_timer = Timer("eigenvalues")
+    ev_timer.Start()
     eigenvalues = EigenValues_Preconditioner(mat=a_matrix, pre=pre_a)
     k = 1 / min(eigenvalues) + 1e-3
+    ev_timer.Stop()
     print("scale factor: ", k)
     print("condition number: ", max(eigenvalues) / min(eigenvalues))
     scaled_pre_a = ScaledPreconditioner(k, a_matrix, pre_a)
