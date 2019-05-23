@@ -2,7 +2,8 @@ from math import pi
 from ngsolve import *
 from netgen.geom2d import SplineGeometry
 
-# import netgen.gui
+import netgen.gui
+
 geo = SplineGeometry()
 geo.AddRectangle((-1, -1), (1, 1), bcs=("bottom", "right", "top", "left"))
 mesh = Mesh(geo.GenerateMesh(maxh=0.1))
@@ -49,36 +50,47 @@ tstep = 1  # time that we want to step over within one block-run
 t_intermediate = 0  # time counter within one block-run
 res = gfu.vec.CreateVector()
 t_bigstep = t_intermediate
-i = 0
+k = 0
 krylov_dim = 5
 krylov_space = {}
 for j in range(krylov_dim):
-    krylov_space[j] = gfu.vec.CreateVector()
+	krylov_space[j] = gfu.vec.CreateVector()
 
 Mm = Matrix(krylov_dim, krylov_dim)
 Am = Matrix(krylov_dim, krylov_dim)
+Mm_star_inv = Matrix(krylov_dim, krylov_dim)
 y = Vector(krylov_dim)
-M_tmp=m.mat.CreateColVector()
-A_tmp=a.mat.CreateColVector()
-
+y_old = Vector(krylov_dim)
+y_update = Vector(krylov_dim)
+y_old[:] = 0
+y_old[0] = 1
+M_tmp = m.mat.CreateColVector()
+A_tmp = a.mat.CreateColVector()
+tau_big = krylov_dim * tau
 with TaskManager():
-    while t_intermediate < tstep - 0.5 * tau:
+	while t_intermediate < tstep - 0.5 * tau:
 
-        krylov_space[i % krylov_dim].data = gfu.vec
-        res.data = tau * f.vec - tau * a.mat * gfu.vec
-        gfu.vec.data += invmstar * res
-        t_intermediate += tau
-        print(time + t_intermediate)
-        Redraw(blocking=True)
-        i += 1
+		krylov_space[k % krylov_dim].data = gfu.vec
+		res.data = tau * f.vec - tau * a.mat * gfu.vec
+		gfu.vec.data += invmstar * res
+		t_intermediate += tau
+		print(time + t_intermediate)
+		Redraw(blocking=True)
+		k += 1
 
-        if i % krylov_dim == 0:
-            for i in range(krylov_dim):
-                for j in range(krylov_dim):
-                    M_tmp.data=m.mat * krylov_space[j]
-                    A_tmp.data=a.mat * krylov_space[j]
-                    Mm[i, j] = InnerProduct(M_tmp, krylov_space[i])
-                    Am[i, j] = InnerProduct(A_tmp, krylov_space[i])
-            print(Mm)
+		if k % krylov_dim == 0:
+			for i in range(krylov_dim):
+				for j in range(krylov_dim):
+					M_tmp.data = m.mat * krylov_space[j]
+					A_tmp.data = a.mat * krylov_space[j]
+					Mm[i, j] = InnerProduct(M_tmp, krylov_space[i])
+					Am[i, j] = InnerProduct(A_tmp, krylov_space[i])
+			Mm_star = Mm + tau_big * Am
+			Mm_star.Inverse(Mm_star_inv)
+			y_update = -tau_big * Mm_star_inv * y_old
+			gfu.vec[:] = 0
+			for i in range(krylov_dim):
+				gfu.vec.data += (y_update[i] + (1 if i == 0 else 0)) * krylov_space[i]
+
 print("", Norm(gfu.vec))
 time += t_intermediate
