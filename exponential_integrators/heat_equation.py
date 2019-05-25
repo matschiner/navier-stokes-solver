@@ -54,29 +54,6 @@ gfu = GridFunction(fes)
 gfu.Set((1 - y * y) * x)
 Draw(gfu, mesh, "u")
 
-tstep = 1  # time that we want to step over within one block-run
-t_intermediate = 0  # time counter within one block-run
-res = gfu.vec.CreateVector()
-t_bigstep = t_intermediate
-k = 0
-krylov_dim = 100
-krylov_space = {}
-for j in range(krylov_dim):
-    krylov_space[j] = gfu.vec.CreateVector()
-
-Mm = Matrix(krylov_dim, krylov_dim)
-Am = Matrix(krylov_dim, krylov_dim)
-Mm_star_inv = Matrix(krylov_dim, krylov_dim)
-y = Vector(krylov_dim)
-y_old = Vector(krylov_dim)
-y_update = Vector(krylov_dim)
-y_old[:] = 0
-y_old[0] = 1
-
-tau_big = krylov_dim * tau
-timer_ol = Timer("OuterLoop")
-timer_ol.Start()
-
 
 def gram_schmidt(space, tries=3):
     for tries in range(tries):
@@ -92,6 +69,7 @@ def gram_schmidt(space, tries=3):
     #    for j in range(len(krylov_space)):
     #        Orthogonality[i, j] = InnerProduct(krylov_space[i], krylov_space[j])
     # print("orthogonality\n", numpy.round(Orthogonality,12))
+    return space
 
 
 def reduced_space_projection_update(space, Am, Mm):
@@ -111,36 +89,75 @@ def reduced_space_projection_update(space, Am, Mm):
     return Am, Mm
 
 
+t_end = 1  # time that we want to step over within one block-run
+t_current = 0  # time counter within one block-run
+res = gfu.vec.CreateVector()
+k = 0
+krylov_dim = 5
+krylov_space = {}
+for j in range(krylov_dim):
+    krylov_space[j] = gfu.vec.CreateVector()
+
+Mm = Matrix(krylov_dim, krylov_dim)
+Am = Matrix(krylov_dim, krylov_dim)
+Mm_star_inv = Matrix(krylov_dim, krylov_dim)
+y = Vector(krylov_dim)
+y_old = Vector(krylov_dim)
+y_update = Vector(krylov_dim)
+y_old[:] = 0
+y_old[0] = 1
+
+y_old_mat = Matrix(krylov_dim, krylov_dim)
+y_old_mat[:] = 0
+y_old_mat[0, :] = 1
+
+tmp = Vector(krylov_dim)
+tau_big = krylov_dim * tau
+timer_ol = Timer("OuterLoop")
+timer_ol.Start()
+from rk_implicit_ho import RK_impl
+
+rk_method = RK_impl(krylov_dim)
+
 with TaskManager():
-    while t_intermediate < tstep - 0.5 * tau:
+    while t_current < t_end - 0.5 * tau:
 
         krylov_space[k % krylov_dim].data = gfu.vec
         res.data = tau * f.vec - tau * a.mat * gfu.vec
         gfu.vec.data += invmstar * res
-        t_intermediate += tau
-        print("time =", round(time + t_intermediate, 4))
+        t_current += tau
+        print("time =", round(time + t_current, 4))
 
         k += 1
 
         if k % krylov_dim == 0:
-            timer_ol.Stop()
-            print("building base took", timer_ol.time)
+            # timer_ol.Stop()
+            # print("building base took", timer_ol.time)
+            # timer_ol = Timer("OuterLoop")
             krylov_space = gram_schmidt(krylov_space)
 
-            reduced_space_projection_update(krylov_space, Am, Mm)
+            Am, Mm = reduced_space_projection_update(krylov_space, Am, Mm)
 
-            # solving the reduced system
+            # Mm_RK_star = Mm + tau_big * Am * rk_method.a.T
+            # Mm_RK_star.Inverse(Mm_star_inv)
+
+            # print(y_old_mat)
+            # k = Mm_star_inv * Am * y_old_mat
+            # print("k", k)
+            # todo: solve Mm*k + Am*k*rk_method.a.T = -Am*y_old_mat
+
+            # solving the reduced system with impl EV
             Mm_star = Mm + tau_big * Am
             Mm_star.Inverse(Mm_star_inv)
             y_update = -tau_big * Mm_star_inv * Am * y_old
-
             # updating the big system with the better solution
             gfu.vec[:] = 0
             for i in range(krylov_dim):
+                # gfu.vec.data += y_update[i] * krylov_space[i]
                 gfu.vec.data += (y_update[i] + (1 if i == 0 else 0)) * krylov_space[i]
 
-            timer_ol.Start()
+            # timer_ol.Start()
             Redraw(blocking=True)
 
 print("", Norm(gfu.vec))
-time += t_intermediate
+time += t_current
