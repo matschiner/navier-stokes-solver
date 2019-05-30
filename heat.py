@@ -1,6 +1,8 @@
 from ngsolve import *
 from netgen.geom2d import unit_square
 from ngsolve.ngstd import Timer
+from runge_kutta_method import linear_runge_kutta_step, ImplicitRungeKuttaMethodWeights
+from orthonormalization import orthonormalize
 import netgen.gui
 
 mesh = Mesh(unit_square.GenerateMesh(maxh=0.1))
@@ -46,25 +48,11 @@ heat_inverse = heat.mat.Inverse(space.FreeDofs())
 
 subspace_dimension = 10
 dt = time_step / subspace_dimension
+runge_kutta_weights = ImplicitRungeKuttaMethodWeights(10)
 
 time = 0
 
-
-def orthonormalize(basis, tries=3):
-    orthonormalize_timer = Timer("orthonormalization")
-    orthonormalize_timer.Start()
-    for tries in range(tries):
-        for j in range(len(basis)):
-            for i in range(j):
-                basis[j].data -= InnerProduct(basis[i], basis[j]) / \
-                    InnerProduct(basis[i], basis[i]) * basis[i]
-            basis[j].data = 1 / Norm(basis[j]) * basis[j]
-    orthonormalize_timer.Stop()
-
-    return basis
-
-
-with(TaskManager(pajetrace=100 * 1000 * 1000)):
+with(TaskManager()):
     while True:
         input(f"time = {time}")
 
@@ -97,10 +85,10 @@ with(TaskManager(pajetrace=100 * 1000 * 1000)):
                 subspace_mass[(i, j)] = InnerProduct(
                     subspace_basis[i], residual)
 
-        subspace_heat = subspace_mass + time_step * subspace_diffusion
+        subspace_mass_inverse = Matrix(subspace_dimension, subspace_dimension)
+        subspace_mass.Inverse(subspace_mass_inverse)
 
-        subspace_heat_inverse = Matrix(subspace_dimension, subspace_dimension)
-        subspace_heat.Inverse(subspace_heat_inverse)
+        evolution_matrix = -subspace_mass_inverse * subspace_diffusion
 
         subspace_matrix_assembling_timer.Stop()
 
@@ -110,15 +98,16 @@ with(TaskManager(pajetrace=100 * 1000 * 1000)):
         subspace_temperature = Vector(subspace_dimension)
         subspace_temperature[:] = 0
         subspace_temperature[0] = Norm(temperature.vec)
-        subspace_residual = subspace_diffusion.T[0]
-        subspace_temperature -= time_step * subspace_heat_inverse * subspace_residual
+
+        subspace_temperature = linear_runge_kutta_step(runge_kutta_weights,
+                                                       evolution_matrix,
+                                                       subspace_temperature,
+                                                       time_step)
 
         temperature.vec[:] = 0
         for i, basis_vector in enumerate(subspace_basis):
             temperature.vec.data += subspace_temperature[i] * basis_vector
 
-        residual.data = diffusion.mat * temperature.vec
-        temperature.vec.data -= time_step * heat_inverse * residual
         time += time_step
         large_timestep_timer.Stop()
         timer.Stop()
