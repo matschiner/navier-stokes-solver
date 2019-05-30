@@ -43,12 +43,60 @@ residual = temperature.vec.CreateVector()
 residual.data = source.vec - diffusion.mat * temperature.vec
 heat_inverse = heat.mat.Inverse(space.FreeDofs())
 
-subspace_dimension = 10
+subspace_dimension = 3
 dt = time_step / subspace_dimension
 
 time = 0
 while True:
     input(f"time = {time}")
+
+    subspace_basis = [temperature.vec.CreateVector()]
+    for j, v in enumerate(temperature.vec):
+        subspace_basis[0][j] = v
+
+    for i in range(1, subspace_dimension):
+        residual.data = diffusion.mat * temperature.vec
+        temperature.vec.data -= dt * heat_inverse * residual
+        subspace_basis_vector = temperature.vec.CreateVector()
+        for j, v in enumerate(temperature.vec):
+            subspace_basis_vector[j] = v
+
+        subspace_basis.append(subspace_basis_vector)
+
+    subspace_diffusion = Matrix(subspace_dimension, subspace_dimension)
+    subspace_mass = Matrix(subspace_dimension, subspace_dimension)
+
+    for i in range(subspace_dimension):
+        for j in range(subspace_dimension):
+            residual.data = diffusion.mat * subspace_basis[j]
+            subspace_diffusion[(i, j)] = InnerProduct(
+                subspace_basis[i], residual)
+
+            residual.data = mass.mat * subspace_basis[j]
+            subspace_mass[(i, j)] = InnerProduct(subspace_basis[i], residual)
+
+    print(subspace_diffusion)
+
+    print(subspace_mass)
+
+    subspace_heat = subspace_mass + time_step * subspace_diffusion
+    print(subspace_heat)
+
+    subspace_heat_inverse = Matrix(subspace_dimension, subspace_dimension)
+    subspace_heat.Inverse(subspace_heat_inverse)
+    print(subspace_heat_inverse)
+
+    subspace_temperature = Vector(subspace_dimension)
+    subspace_temperature[:] = 0
+    subspace_temperature[0] = 1
+    subspace_residual = subspace_diffusion.T[0]
+    subspace_temperature -= time_step * \
+        subspace_heat_inverse * subspace_residual
+
+    temperature.vec[:] = 0
+    for i, basis_vector in enumerate(subspace_basis):
+        temperature.vec.data += subspace_temperature[i] * basis_vector
+
     residual.data = diffusion.mat * temperature.vec
     temperature.vec.data -= time_step * heat_inverse * residual
     time += time_step
