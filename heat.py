@@ -56,6 +56,10 @@ def exact_l2_norm(t):
     return exp(-2 * pi ** 2 * t) / 2
 
 
+def exact_solution(t):
+    return exp(-2 * pi ** 2 * t) * sin(pi * x) * sin(pi * y)
+
+
 with(TaskManager()):
     while True:
         input(f"time = {time}")
@@ -116,6 +120,11 @@ with(TaskManager()):
             temperature.vec.data += subspace_temperature[i] * basis_vector
 
         time += time_step
+        temperature_norm = sqrt(Integrate(temperature * temperature, mesh))
+        difference = sqrt(Integrate(
+            (temperature - exact_solution(time)) * (temperature - exact_solution(time)), mesh))
+        print(f"temperature L2 norm: {temperature_norm}, exact L2 norm: {exact_l2_norm(time)}, difference: {difference}")
+
         large_timestep_timer.Stop()
         timer.Stop()
         Redraw()
