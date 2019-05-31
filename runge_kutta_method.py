@@ -8,7 +8,6 @@ def lagrange(c, n, x):
 
 
 class ImplicitRungeKuttaMethodWeights():
-
     def __init__(self, deg=3):
         c_big_interval, self.b_numpy = np.polynomial.legendre.leggauss(deg)
         self.c = (c_big_interval + 1) / 2
@@ -24,30 +23,32 @@ class ImplicitRungeKuttaMethodWeights():
                     lambda xx: lagrange(ca, j, xx), 0, self.c[i])[0]
 
 
-def linear_runge_kutta_step(weights, matrix, current_value, step_width):
+def linear_implicit_runge_kutta_step(weights, matrix, current_value, step_width):
     temp = matrix * current_value
 
-    m = Matrix(matrix.Width() * weights.a.Height(),
-               matrix.Height() * weights.a.Height())
-    for i in range(weights.a.Width()):
-        for j in range(weights.a.Height()):
-            a = weights.a[(j, i)]
-            for k in range(matrix.Width()):
-                for l in range(matrix.Height()):
-                    m[(j * matrix.Width() + l, i * matrix.Height() + k)] = - \
-                        step_width * a * matrix[(l, k)]
+    coefficient_matrix = Matrix(matrix.Width() * weights.a.Height(),
+                                matrix.Height() * weights.a.Height())
+    for block_col in range(weights.a.Width()):
+        for block_row in range(weights.a.Height()):
+            a = weights.a[block_row, block_col]
+            for inner_col in range(matrix.Width()):
+                for inner_row in range(matrix.Height()):
+                    row = block_row * matrix.Height() + inner_row
+                    col = block_col * matrix.Width() + inner_col
+                    coefficient_matrix[row, col] = - \
+                        step_width * a * matrix[inner_row, inner_col]
 
     for i in range(matrix.Height() * weights.a.Width()):
-        m[(i, i)] += 1
+        coefficient_matrix[i, i] += 1
 
-    m_inverse = Matrix(m.Width(), m.Height())
-    m.Inverse(m_inverse)
+    inverse = Matrix(coefficient_matrix.Width(), coefficient_matrix.Height())
+    coefficient_matrix.Inverse(inverse)
 
-    v = Vector(matrix.Height() * weights.a.Height())
+    inhomogeneity = Vector(matrix.Height() * weights.a.Height())
     for i in range(weights.a.Height()):
-        v[i * matrix.Width():(i + 1) * matrix.Width()] = temp
+        inhomogeneity[i * matrix.Width():(i + 1) * matrix.Width()] = temp
 
-    k = m_inverse * v
+    k = inverse * inhomogeneity
 
     next_value = Vector(len(current_value))
     next_value[:] = current_value
