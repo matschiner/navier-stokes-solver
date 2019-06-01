@@ -94,30 +94,25 @@ t_current = 0  # time counter within one block-run
 res = gfu.vec.CreateVector()
 k = 0
 krylov_dim = 5
-krylov_space = {}
-for j in range(krylov_dim):
-    krylov_space[j] = gfu.vec.CreateVector()
+krylov_space = [gfu.vec.CreateVector() for j in range(krylov_dim)]
 
 Mm = Matrix(krylov_dim, krylov_dim)
 Am = Matrix(krylov_dim, krylov_dim)
 Mm_star_inv = Matrix(krylov_dim, krylov_dim)
-y = Vector(krylov_dim)
 y_old = Vector(krylov_dim)
 y_update = Vector(krylov_dim)
 y_old[:] = 0
 y_old[0] = 1
 
-y_old_mat = Matrix(krylov_dim, krylov_dim)
-y_old_mat[:] = 0
-y_old_mat[0, :] = 1
-
-tmp = Vector(krylov_dim)
 tau_big = krylov_dim * tau
+
 timer_ol = Timer("OuterLoop")
 timer_ol.Start()
+
 from rk_implicit_ho import RK_impl
 
-rk_method = RK_impl(krylov_dim)
+rk_method = RK_impl(krylov_dim, tau_big)
+method = "rk"
 
 with TaskManager():
     while t_current < t_end - 0.5 * tau:
@@ -138,26 +133,25 @@ with TaskManager():
 
             Am, Mm = reduced_space_projection_update(krylov_space, Am, Mm)
 
-            # Mm_RK_star = Mm + tau_big * Am * rk_method.a.T
-            # Mm_RK_star.Inverse(Mm_star_inv)
+            if method == "impl_EV":
+                Mm_star = Mm + tau_big * Am
+                Mm_star.Inverse(Mm_star_inv)
+                y_update = -tau_big * Mm_star_inv * Am * y_old
+                y_update[0] += 1
+                # print("update\n", y_update)
+            else:
+                y_update = rk_method.do_step_ngs(-Mm, Am, y_old)
+                # print("update2\n", y_update)
 
-            # print(y_old_mat)
-            # k = Mm_star_inv * Am * y_old_mat
-            # print("k", k)
-            # todo: solve Mm*k + Am*k*rk_method.a.T = -Am*y_old_mat
-
-            # solving the reduced system with impl EV
-            Mm_star = Mm + tau_big * Am
-            Mm_star.Inverse(Mm_star_inv)
-            y_update = -tau_big * Mm_star_inv * Am * y_old
             # updating the big system with the better solution
             gfu.vec[:] = 0
             for i in range(krylov_dim):
-                # gfu.vec.data += y_update[i] * krylov_space[i]
-                gfu.vec.data += (y_update[i] + (1 if i == 0 else 0)) * krylov_space[i]
+                gfu.vec.data += y_update[i] * krylov_space[i]
 
             # timer_ol.Start()
+
             Redraw(blocking=True)
+            input("next step")
 
 print("", Norm(gfu.vec))
 time += t_current
