@@ -1,3 +1,5 @@
+# not currently working ... testing in wave_simple
+
 import netgen.gui
 from netgen.geom2d import unit_square
 from ngsolve import *

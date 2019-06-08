@@ -17,7 +17,7 @@ def gram_schmidt(space, tries=3):
     return space
 
 
-def reduced_space_projection_update(space, a,m, Am, Mm):
+def reduced_space_projection_update(space, a, m, Am, Mm):
     # timer_prep = Timer("InnerProducts")
     # timer_prep.Start()
 
@@ -32,3 +32,19 @@ def reduced_space_projection_update(space, a,m, Am, Mm):
     # timer_prep.Stop()
     # print("time of inner products", timer_prep.time)
     return Am, Mm
+
+def reduced_space_projection(space, matrix, matrix_small):
+    # timer_prep = Timer("InnerProducts")
+    # timer_prep.Start()
+
+    M_tmp = matrix.CreateColVector()
+
+    for j in range(len(space)):
+        M_tmp.data = matrix * space[j]
+
+        for i in range(len(space)):
+            matrix_small[i, j] = InnerProduct(M_tmp, space[i])
+
+    # timer_prep.Stop()
+    # print("time of inner products", timer_prep.time)
+    return matrix_small

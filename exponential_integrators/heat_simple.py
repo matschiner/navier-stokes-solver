@@ -72,9 +72,7 @@ y_update = Vector(krylov_dim)
 y_old[:] = 0
 y_old[0] = 1
 
-tau_big = krylov_dim * tau
-
-rk_method = RK_impl(krylov_dim, tau)
+rk_method = RK_impl(krylov_dim, krylov_dim*tau)
 
 with TaskManager():
     while t_current < t_end - 0.5 * tau:
@@ -91,10 +89,7 @@ with TaskManager():
             krylov_space = ei_core.gram_schmidt(krylov_space)
             Am, Mm = ei_core.reduced_space_projection_update(krylov_space, a, m, Am, Mm)
 
-            y_update = y_old
-            for i in range(krylov_dim):
-                y_update = rk_method.do_step_ngs(-Mm, Am, y_update)
-            # print("update2\n", y_update)
+            y_update = rk_method.do_step_ngs(-Mm, Am, y_old)
 
             gfu.vec[:] = 0
             for i in range(krylov_dim):

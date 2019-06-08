@@ -84,7 +84,7 @@ for sol_index in range(5):
     timer_ol = Timer("OuterLoop")
     timer_ol.Start()
 
-    rk_method = RK_impl(krylov_dim, tau)
+    rk_method = RK_impl(krylov_dim, tau*krylov_dim)
     method = "impl_EV"
 
     with TaskManager():
@@ -111,12 +111,8 @@ for sol_index in range(5):
                     Mm_star.Inverse(Mm_star_inv)
                     y_update = -tau_big * Mm_star_inv * Am * y_old
                     y_update[0] += 1
-                    # print("update\n", y_update)
                 else:
-                    y_update = y_old
-                    for i in range(krylov_dim):
-                        y_update = rk_method.do_step_ngs(-Mm, Am, y_update)
-                    # print("update2\n", y_update)
+                    y_update = rk_method.do_step_ngs(-Mm, Am, y_old)
 
                 # updating the big system with the better solution
                 gfu.vec[:] = 0

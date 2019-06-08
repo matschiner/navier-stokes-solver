@@ -19,7 +19,7 @@ Draw(mesh)
 tau = 0.01
 
 t = 0
-t_end = 100
+t_end = 1
 
 fes = H1(mesh, order=5, dirichlet="left|right|top|bottom")
 u, phi = fes.TnT()
@@ -37,7 +37,7 @@ f = LinearForm(fes)
 
 u = GridFunction(fes)
 u.Set(exp(- (20 ** 2) * ((x - 0.5) ** 2 + (y - 0.5) ** 2)))
-Draw(u)
+Draw(u, autoscale=False, min=-0.1, max=0.1)
 
 a.Assemble()
 m_star.Assemble()
@@ -46,55 +46,56 @@ f.Assemble()
 
 ms_inv = m_star.mat.Inverse(fes.FreeDofs())
 
+v = GridFunction(fes)
+v.vec[:] = 0
+
 r = u.vec.CreateVector()
-v = u.vec.CreateVector()
-v[:] = 0
 accel = u.vec.CreateVector()
 
 k = 0
-krylov_dim = 6
-krylov_space = [u.vec.CreateVector() for j in range(krylov_dim)]
+krylov_dim = 16
+krylov_space = [u.vec.CreateVector() for j in range(krylov_dim + 1)]
+# ... consisting of all u vectors plus first v vector in last position
 
-Mm = Matrix(krylov_dim, krylov_dim)
-Am = Matrix(krylov_dim, krylov_dim)
-Mm_star_inv = Matrix(krylov_dim, krylov_dim)
-y_old = Vector(krylov_dim)
-y_update = Vector(krylov_dim)
-y_old[:] = 0
-y_old[0] = 1
+Mm = Matrix(krylov_dim+1, krylov_dim+1)
+Am = Matrix(krylov_dim+1, krylov_dim+1)
+Mm_star_inv = Matrix(krylov_dim+1, krylov_dim+1)
 
-tau_big = krylov_dim * tau
+rk_method = RK_impl(krylov_dim, krylov_dim * tau)
 
-rk_method = RK_impl(krylov_dim, tau)
-method = "rk"
-v_0_small = Vector(krylov_dim)
+v_0_small = Vector(krylov_dim+1)
 v_0_small[:] = 0
+v_0_small[0] = 1
+
+u_0_small = Vector(krylov_dim+1)
+u_0_small[:] = 0
+u_0_small[krylov_dim] = 1
 
 while t < t_end:
     krylov_space[k % krylov_dim].data = u.vec
+    if k % krylov_dim == 0:
+        krylov_space[krylov_dim] = v.vec
     t += tau
     print("t =", round(t, 4))
-    r.data = -tau * a.mat * u.vec - 0.5 * tau ** 2 * a.mat * v
+    r.data = -tau * a.mat * u.vec - 0.5 * tau ** 2 * a.mat * v.vec
     accel.data = ms_inv * r
-    u.vec.data += tau * v + 0.5 * tau * accel
-    v.data += accel
+    u.vec.data += tau * v.vec + 0.5 * tau * accel
+    v.vec.data += accel
 
     k += 1
     if k % krylov_dim == 0:
-
         krylov_space = ei_core.gram_schmidt(krylov_space)
         Am, Mm = ei_core.reduced_space_projection_update(krylov_space, a, m, Am, Mm)
 
-        y_update = v_0_small
-        for i in range(krylov_dim):
-            y_update = rk_method.do_step_ngs(-Mm, Am, y_update)
-        v_0_small = y_update
-        # print("update2\n", y_update)
+        v_update = rk_method.do_step_ngs(Mm, -Am, v_0_small)
+        u_update = rk_method.do_step_ngs(Mm, np.identity(krylov_dim+1), u_0_small)
 
         # updating the big system with the better solution
-        v[:] = 0
-        for i in range(krylov_dim):
-            v.data += y_update[i] * krylov_space[i]
+        v.vec[:] = 0
+        u.vec[:] = 0
+        for i in range(krylov_dim+1):
+            v.vec.data += v_update[i] * krylov_space[i]
+            u.vec.data += u_update[i] * krylov_space[i]
 
             # input("next step")
-        Redraw(blocking=True)
+    Redraw(blocking=True)
