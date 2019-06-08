@@ -6,13 +6,13 @@ def gram_schmidt(space, tries=3):
             for i in range(0, j):
                 space[j].data -= InnerProduct(space[i], space[j]) / InnerProduct(space[i], space[i]) * space[i]
             # normalising
-            # krylov_space[j].data = 1 / Norm(krylov_space[j]) * krylov_space[j]
+            space[j].data = 1 / Norm(space[j]) * space[j]
 
     # checking the orthogonality
-    # Orthogonality = Matrix(len(krylov_space), len(krylov_space))
-    # for i in range(len(krylov_space)):
-    #    for j in range(len(krylov_space)):
-    #        Orthogonality[i, j] = InnerProduct(krylov_space[i], krylov_space[j])
+    # Orthogonality = Matrix(len(space), len(space))
+    # for i in range(len(space)):
+    #    for j in range(len(space)):
+    #        Orthogonality[i, j] = InnerProduct(space[i], space[j])
     # print("orthogonality\n", numpy.round(Orthogonality,12))
     return space
 
