@@ -36,10 +36,10 @@ def exact_sol(time):
 solutions = {}
 err_exact = {}
 err_exact_taus = {}
-for sol_index in range(5):
+for sol_index in range(7):
     tau /= 2
     time = 0.0
-
+    print("tau", tau, "\n")
     b = CoefficientFunction((2 * y * (1 - x * x), -2 * x * (1 - y * y)))
     Draw(b, mesh, "wind")
 
@@ -62,7 +62,8 @@ for sol_index in range(5):
     f.Assemble()
 
     gfu = GridFunction(fes)
-    gfu.Set(sin(pi * x) * sin(pi * y))
+    # gfu.Set(sin(pi * x) * sin(pi * y))
+    gfu.Set((1 - y * y) * x)
     Draw(gfu, mesh, "u")
     t_end = 1  # time that we want to step over within one block-run
     t_current = 0  # time counter within one block-run
@@ -84,8 +85,8 @@ for sol_index in range(5):
     timer_ol = Timer("OuterLoop")
     timer_ol.Start()
 
-    rk_method = RK_impl(krylov_dim, tau*krylov_dim)
-    method = "impl_EV"
+    rk_method = RK_impl(krylov_dim, tau * krylov_dim)
+    method = "exp-int"
 
     with TaskManager():
         while t_current < t_end - 0.5 * tau:
@@ -94,7 +95,7 @@ for sol_index in range(5):
             res.data = tau * f.vec - tau * a.mat * gfu.vec
             gfu.vec.data += invmstar * res
             t_current += tau
-            # print("time =", round(time + t_current, 4))
+            print("\rtime =", round(time + t_current, 4), end="")
 
             k += 1
 
@@ -126,7 +127,7 @@ for sol_index in range(5):
                 # input("next step")
         err_exact[sol_index] = sqrt(Integrate((exact_sol(t_current) - gfu) ** 2, mesh))
         err_exact_taus[sol_index] = tau
-        print("diff", err_exact[sol_index])
+        # print("diff", err_exact[sol_index])
 
     # input("next")
     time += t_current
@@ -142,8 +143,8 @@ import matplotlib.pyplot as plt
 
 plt.loglog(taus, err)
 exact_taus = np.array([err_exact_taus[k] for k in err_exact_taus])
-plt.loglog(exact_taus, np.array([err_exact[k] for k in err_exact]))
-plt.loglog(exact_taus, exact_taus ** 4)
-plt.loglog(exact_taus, 1e10 * exact_taus ** krylov_dim)
-plt.legend(["ref err", "exact err", "tau^4", f"tau^{krylov_dim}"])
+# plt.loglog(exact_taus, np.array([err_exact[k] for k in err_exact]))
+plt.loglog(exact_taus, 1e4 * exact_taus ** 4)
+plt.loglog(exact_taus, 1e12 * exact_taus ** krylov_dim)
+plt.legend(["ref err", "tau^4", f"tau^{krylov_dim}"])
 plt.show()
