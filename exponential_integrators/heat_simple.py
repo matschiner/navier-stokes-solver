@@ -8,7 +8,7 @@ import exponential_integrators.core as ei_core
 from exponential_integrators.rk_implicit_ho import RK_impl
 import numpy as np
 
-import netgen.gui
+# import netgen.gui
 
 ngsglobals.msg_level = 0
 geo = SplineGeometry()
@@ -26,7 +26,7 @@ fes = H1(mesh, order=5, dirichlet="bottom|right|left|top")
 print(fes.ndof)
 
 u, v = fes.TnT()  # TnT : Trial and Test function
-tau = 0.05
+tau = 0.02
 
 
 def exact_sol(time):
@@ -57,7 +57,7 @@ f.Assemble()
 gfu = GridFunction(fes)
 gfu.Set(sin(pi * x) * sin(pi * y))
 Draw(gfu, mesh, "u")
-t_end = 100  # time that we want to step over within one block-run
+t_end = 1  # time that we want to step over within one block-run
 t_current = 0  # time counter within one block-run
 res = gfu.vec.CreateVector()
 k = 0
@@ -72,9 +72,20 @@ y_update = Vector(krylov_dim)
 y_old[:] = 0
 y_old[0] = 1
 
-rk_method = RK_impl(krylov_dim, krylov_dim*tau)
+rk_method = RK_impl(krylov_dim, krylov_dim * tau)
 
 with TaskManager():
+    while t_current < t_end - 0.5 * tau:
+        res.data = tau * f.vec - tau * a.mat * gfu.vec
+        gfu.vec.data += invmstar * res
+        t_current += tau
+        print("time =", round(t_current, 4))
+
+    sol_normal = GridFunction(fes)
+    sol_normal.vec[:] = 0
+    sol_normal.vec.data += gfu.vec
+    t_current = 0
+    gfu.Set(sin(pi * x) * sin(pi * y))
     while t_current < t_end - 0.5 * tau:
 
         krylov_space[k % krylov_dim].data = gfu.vec
@@ -96,3 +107,6 @@ with TaskManager():
                 gfu.vec.data += y_update[i] * krylov_space[i]
 
             Redraw(blocking=True)
+
+    sol_normal.vec.data -= gfu.vec
+    print(Norm(sol_normal.vec), )

@@ -6,7 +6,7 @@ def gram_schmidt(space, tries=3):
             for i in range(0, j):
                 space[j].data -= InnerProduct(space[i], space[j]) / InnerProduct(space[i], space[i]) * space[i]
             # normalising
-            space[j].data = 1 / Norm(space[j]) * space[j]
+            # space[j].data = 1 / Norm(space[j]) * space[j]
 
     # checking the orthogonality
     # Orthogonality = Matrix(len(space), len(space))

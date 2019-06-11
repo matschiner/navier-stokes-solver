@@ -26,11 +26,11 @@ fes = H1(mesh, order=5, dirichlet="bottom|right|left|top")
 print(fes.ndof)
 
 u, v = fes.TnT()  # TnT : Trial and Test function
-tau = 0.2
+tau = 0.02
 
 
 def exact_sol(time):
-    return np.exp(-2 * pi ** 2 * time) * sin(pi * x) * sin(pi * y)
+    return np.exp(-2 * pi ** 2 * time) * sin(pi * x) * sin(pi * y)+np.exp(-13 * pi ** 2 * time) * sin(3*pi * x) * sin(2*pi * y)
 
 
 solutions = {}
@@ -39,12 +39,12 @@ err_exact_taus = {}
 for sol_index in range(7):
     tau /= 2
     time = 0.0
-    print("tau", tau, "\n")
+    print("\n" * 2, "tau", tau)
     b = CoefficientFunction((2 * y * (1 - x * x), -2 * x * (1 - y * y)))
     Draw(b, mesh, "wind")
 
     a = BilinearForm(fes, symmetric=False)
-    # a += SymbolicBFI(0.02 * grad(u) * grad(v) + b * grad(u) * v)
+    #a += SymbolicBFI(0.02 * grad(u) * grad(v) + b * grad(u) * v)
     a += grad(u) * grad(v) * dx
     a.Assemble()
 
@@ -62,10 +62,10 @@ for sol_index in range(7):
     f.Assemble()
 
     gfu = GridFunction(fes)
-    # gfu.Set(sin(pi * x) * sin(pi * y))
+    # gfu.Set(sin(pi * x) * sin(pi * y)+ sin(3*pi * x) * sin(2*pi * y))
     gfu.Set((1 - y * y) * x)
     Draw(gfu, mesh, "u")
-    t_end = 1  # time that we want to step over within one block-run
+    t_end = 0.1  # time that we want to step over within one block-run
     t_current = 0  # time counter within one block-run
     res = gfu.vec.CreateVector()
     k = 0
@@ -86,7 +86,7 @@ for sol_index in range(7):
     timer_ol.Start()
 
     rk_method = RK_impl(krylov_dim, tau * krylov_dim)
-    method = "exp-int"
+    method = "exp_int"
 
     with TaskManager():
         while t_current < t_end - 0.5 * tau:
@@ -95,7 +95,7 @@ for sol_index in range(7):
             res.data = tau * f.vec - tau * a.mat * gfu.vec
             gfu.vec.data += invmstar * res
             t_current += tau
-            print("\rtime =", round(time + t_current, 4), end="")
+            print("\r time =", round(time + t_current, 4), end="")
 
             k += 1
 
@@ -120,11 +120,12 @@ for sol_index in range(7):
                 for i in range(krylov_dim):
                     gfu.vec.data += y_update[i] * krylov_space[i]
 
-                sol = np.array(gfu.vec[:])
-                solutions[sol_index] = sol
                 # timer_ol.Start()
                 Redraw(blocking=True)
                 # input("next step")
+        sol = np.array(gfu.vec[:])
+        solutions[sol_index] = sol
+
         err_exact[sol_index] = sqrt(Integrate((exact_sol(t_current) - gfu) ** 2, mesh))
         err_exact_taus[sol_index] = tau
         # print("diff", err_exact[sol_index])
@@ -132,19 +133,22 @@ for sol_index in range(7):
     # input("next")
     time += t_current
 
-err = np.ones(sol_index - 1)
-taus = np.ones(sol_index - 1)
-for s in range(sol_index - 1):
+err = np.ones(sol_index)
+taus = np.ones(sol_index)
+for s in range(sol_index):
     e = np.linalg.norm(solutions[s] - sol)
     err[s] = e
-    taus[s] = tau * (2 ** (sol_index - s - 1))
-    print(tau * (2 ** (sol_index - s - 1)), "vs", tau, e)
+    taus[s] = tau * (2 ** (sol_index - s))
+    print(tau * (2 ** (sol_index - s)), "vs", tau, e)
 import matplotlib.pyplot as plt
 
 plt.loglog(taus, err)
 exact_taus = np.array([err_exact_taus[k] for k in err_exact_taus])
-# plt.loglog(exact_taus, np.array([err_exact[k] for k in err_exact]))
-plt.loglog(exact_taus, 1e4 * exact_taus ** 4)
-plt.loglog(exact_taus, 1e12 * exact_taus ** krylov_dim)
-plt.legend(["ref err", "tau^4", f"tau^{krylov_dim}"])
+plt.loglog(exact_taus, np.array([err_exact[k] for k in err_exact]))
+plt.loglog(exact_taus, 1e4 * exact_taus ** 1)
+plt.loglog(exact_taus, 1e6 * exact_taus ** 2)
+plt.loglog(exact_taus, 1e10 * exact_taus ** 4)
+#plt.loglog(exact_taus, 1e12 * exact_taus ** krylov_dim)
+plt.legend(["ref err", "tau^1", "tau^2", "tau^4", f"tau^{krylov_dim}"])
+plt.savefig("/Users/max/Dev/navier-stokes-solver/exponential_integrators/test.pdf")
 plt.show()
