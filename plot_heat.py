@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 
 errors = pd.read_csv("heat_errors.csv", index_col=0)
 
-reference_orders = [4, 10]
+reference_orders = [3, 4]
 
 for order in reference_orders:
     errors['time_step^' + str(order)] = [t

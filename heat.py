@@ -1,5 +1,6 @@
 import pandas as pd
 import matplotlib.pyplot as plt
+import numpy as np
 from ngsolve import *
 from netgen.geom2d import unit_square
 from ngsolve.ngstd import Timer
@@ -9,23 +10,30 @@ from math import pi
 import netgen.gui
 
 
-def exact_l2_norm(t):
-    return exp(-2 * pi ** 2 * t) / 2
+def sum_of_unit_square_laplace_eigenfunctions(kl):
+    temperature = CoefficientFunction(0)
+    for k, l in kl:
+        temperature += 2 * sin(k * pi * x) * sin(l * pi * y)
+
+    return temperature
 
 
-def exact_solution(t):
-    return exp(-2 * pi ** 2 * t) * sin(pi * x) * sin(pi * y)
+def exact_solution(kl, t):
+    solution = CoefficientFunction(0)
+    for k, l in kl:
+        solution += 2 * exp(-(k ** 2 + l ** 2) * pi ** 2 * t) * \
+            sin(k * pi * x) * sin(l * pi * y)
+
+    return solution
 
 
-def solve(end_time, time_step):
-    mesh = Mesh(unit_square.GenerateMesh(maxh=0.05))
+def solve(initial_temperature, end_time, time_step):
+    mesh = Mesh(unit_square.GenerateMesh(maxh=0.1))
     Draw(mesh)
 
     space = H1(mesh, order=10, dirichlet='bottom|right|top|left')
 
     print(space)
-
-    initial_temperature = sin(pi * x) * sin(pi * y)
 
     Draw(initial_temperature, mesh, "initial_temperature")
 
@@ -63,13 +71,16 @@ def solve(end_time, time_step):
     residual = temperature.vec.CreateVector()
     heat_inverse = heat.mat.Inverse(space.FreeDofs())
 
-    subspace_dimension = 10
+    subspace_dimension = 5
     dt = time_step / subspace_dimension
     runge_kutta_weights = ImplicitRungeKuttaMethodWeights(10)
     time = 0
+    print(f"time={time}")
 
     with(TaskManager()):
         while time < end_time:
+            time += time_step
+
             print(f"time={time}")
             timer = Timer("exponential integrators timer")
             timer.Start()
@@ -77,16 +88,13 @@ def solve(end_time, time_step):
 
             initial_condition_norm = Norm(temperature.vec)
 
-            #print("values at (0,0)")
-            #print(temperature(mesh(0.0, 0.0)))
-
             subspace_basis_assembling_timer = Timer(
                 "subspace basis assembling")
             subspace_basis_assembling_timer.Start()
+
             for i in range(1, subspace_dimension):
                 residual.data = diffusion.mat * temperature.vec
                 temperature.vec.data -= dt * heat_inverse * residual
-                #print(temperature(mesh(0.0, 0.0)))
                 subspace_basis.append(temperature.vec.Copy())
 
             subspace_basis = orthonormalize(subspace_basis)
@@ -124,39 +132,38 @@ def solve(end_time, time_step):
             subspace_temperature[:] = 0
             subspace_temperature[0] = initial_condition_norm
 
-            subspace_temperature = linear_implicit_runge_kutta_step(runge_kutta_weights,
-                                                                    evolution_matrix,
-                                                                    subspace_temperature,
-                                                                    time_step)
-            #print("subspace basis coefficients")
-            # print(subspace_temperature)
+            next_temperature = linear_implicit_runge_kutta_step(runge_kutta_weights,
+                                                                evolution_matrix,
+                                                                subspace_temperature,
+                                                                time_step)
 
             temperature.vec[:] = 0
             for i, basis_vector in enumerate(subspace_basis):
-                temperature.vec.data += subspace_temperature[i] * basis_vector
-
-            time += time_step
+                temperature.vec.data += next_temperature[i] * basis_vector
 
             large_timestep_timer.Stop()
             timer.Stop()
             Redraw()
 
-        return (temperature, mesh, end_time)
+        return (temperature, mesh, time)
 
 
-time_steps = [0.1, 0.05, 0.025, 0.0125, 0.00625]
-end_time = 0.5
+kl = [(1, 1), (2, 1), (1, 3), (3, 3), (2, 3), (4, 5), (5, 2)]
+initial_temperature = sum_of_unit_square_laplace_eigenfunctions(kl)
+time_steps = np.logspace(-1, -4, num=7).tolist()
+end_time = 0.05
 error_frames = []
 for time_step in time_steps:
-    temperature, mesh, time = solve(end_time, time_step)
+    temperature, mesh, time = solve(initial_temperature, end_time, time_step)
     error = sqrt(Integrate(
-        (temperature - exact_solution(time)) * (temperature - exact_solution(time)), mesh))
+        (temperature - exact_solution(kl, time)) * (temperature - exact_solution(kl, time)), mesh))
+    Draw(temperature, mesh, f"temperature_{time_step}")
     error_frames.append(pd.DataFrame(
         {'time_step': time_step, 'error': error}, index=[0]))
 
+Draw(exact_solution(kl, end_time), mesh, f"exact_solution")
 errors = pd.concat(error_frames, ignore_index=True)
 
 errors.to_csv('heat_errors.csv')
 
-
-input("press to quit\n")
+input("press to continue")
