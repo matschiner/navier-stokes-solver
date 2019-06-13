@@ -1,6 +1,6 @@
 from ngsolve.la import *
 from solvers.krylovspace import *
-from solvers.bramblepasciak import BramblePasciakCG as BPCG_Max
+from solvers.bramblepasciak import BramblePasciakCG as BPCG
 from ngsolve import *
 
 ngsglobals.msg_level = 0
@@ -146,8 +146,8 @@ def spaces_test(V, Q, order, precon="bddc",
 
     with TaskManager():#pajetrace=100 * 1000 * 1000):
         bramblePasciakTimer.Start()
-        results["nits_bpcg"] = BPCG_Max(a.mat, b.mat, None, f.vec, g.vec, preA, preM, sol2, initialize=False, tol=1e-7,
-                                        maxsteps=100000, rel_err=True)
+        results["nits_bpcg"] = BPCG(a.mat, b.mat, None, f.vec, g.vec, preA, preM, sol2, initialize=False, tol=1e-7,
+                                    maxsteps=100000, rel_err=True)
         bramblePasciakTimer.Stop()
         results["time_bpcg"] = bramblePasciakTimer.time
 
