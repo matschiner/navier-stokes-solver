@@ -12,15 +12,10 @@ import numpy as np
 
 ngsglobals.msg_level = 0
 geo = SplineGeometry()
-geo.AddRectangle((-1, -1), (1, 1), bcs=("bottom", "right", "top", "left"))
+geo.AddRectangle((0, 0), (1, 1), bcs=("bottom", "right", "top", "left"))
 
-ngsmesh_filename = "test_05"
-try:
-    mesh = Mesh(ngsmesh_filename + ".vol.gz")
-except Exception as e:
-    ngsmesh = geo.GenerateMesh(maxh=0.05)
-    mesh = Mesh(ngsmesh)
-    ngsmesh.Save(ngsmesh_filename)
+ngsmesh = geo.GenerateMesh(maxh=0.05)
+mesh = Mesh(ngsmesh)
 
 fes = H1(mesh, order=5, dirichlet="bottom|right|left|top")
 print(fes.ndof)
@@ -36,7 +31,7 @@ def exact_sol(time):
 solutions = {}
 err_exact = {}
 err_exact_taus = {}
-for sol_index in range(7):
+for sol_index in range(4):
     tau /= 2
     time = 0.0
     print("\n" * 2, "tau", tau)
@@ -62,14 +57,14 @@ for sol_index in range(7):
     f.Assemble()
 
     gfu = GridFunction(fes)
-    # gfu.Set(sin(pi * x) * sin(pi * y)+ sin(3*pi * x) * sin(2*pi * y))
-    gfu.Set((1 - y * y) * x)
+    gfu.Set(sin(pi * x) * sin(pi * y)+ sin(3*pi * x) * sin(2*pi * y))
+    #gfu.Set((1 - y * y) * x)
     Draw(gfu, mesh, "u")
     t_end = 0.1  # time that we want to step over within one block-run
     t_current = 0  # time counter within one block-run
     res = gfu.vec.CreateVector()
     k = 0
-    krylov_dim = 10
+    krylov_dim = 4
     krylov_space = [gfu.vec.CreateVector() for j in range(krylov_dim)]
 
     Mm = Matrix(krylov_dim, krylov_dim)
@@ -92,7 +87,7 @@ for sol_index in range(7):
         while t_current < t_end - 0.5 * tau:
 
             krylov_space[k % krylov_dim].data = gfu.vec
-            res.data = tau * f.vec - tau * a.mat * gfu.vec
+            res.data =  - tau * a.mat * gfu.vec
             gfu.vec.data += invmstar * res
             t_current += tau
             print("\r time =", round(time + t_current, 4), end="")
@@ -149,6 +144,6 @@ plt.loglog(exact_taus, 1e4 * exact_taus ** 1)
 plt.loglog(exact_taus, 1e6 * exact_taus ** 2)
 plt.loglog(exact_taus, 1e10 * exact_taus ** 4)
 #plt.loglog(exact_taus, 1e12 * exact_taus ** krylov_dim)
-plt.legend(["ref err", "tau^1", "tau^2", "tau^4", f"tau^{krylov_dim}"])
+plt.legend(["ref err", "exact","tau^1", "tau^2", "tau^4", f"tau^{krylov_dim}"])
 plt.savefig("/Users/max/Dev/navier-stokes-solver/exponential_integrators/test.pdf")
 plt.show()
