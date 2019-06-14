@@ -24,7 +24,6 @@ Sigma = Compress(Sigma)
 X = FESpace([V1, VHat, Sigma])
 (u, u_hat, sigma), (v, v_hat, tau) = X.TnT()
 
-
 n = specialcf.normal(mesh.dim)
 
 
@@ -32,13 +31,14 @@ def tang(vec):
     return vec - (vec * n) * n
 
 
-a = BilinearForm(X, eliminate_hidden=True)
+a = BilinearForm(X, eliminate_hidden=True, condense=True)
 a += -InnerProduct(sigma, tau) * dx
 a += div(sigma) * v * dx + div(tau) * u * dx
 a += -(sigma * n) * n * (v * n) * dx(element_boundary=True)
 a += -(tau * n) * n * (u * n) * dx(element_boundary=True)
 a += -(tau * n) * tang(u_hat) * dx(element_boundary=True)
 a += -(sigma * n) * tang(v_hat) * dx(element_boundary=True)
+a += div(u) * div(v) * dx
 
 p, q = Q.TnT()
 
@@ -71,23 +71,10 @@ grid_function.components[0].Set(uin, definedon=mesh.Boundaries("inlet"))
 
 Draw(grid_function.components[0])
 Draw(grid_function_pressure)
-#Draw(x - 0.5, mesh, "source")
 
 solution = BlockVector([grid_function.vec, grid_function_pressure.vec])
 bramble_pasciak_cg(a.mat, b.mat, None, preA, preM,
-                   f.vec, g.vec, solution=solution)
+                   f.vec, g.vec, solution=solution, max_steps=10000)
 
-
-#res = grid_function.vec.CreateVector()
-#res.data = f.vec - a.mat * grid_function.vec
-#res_2 = res.CreateVector()
-# MinRes(mat=a.mat, pre=preA, rhs=f.vec, sol=grid_function.vec, initialize=False,
-#       tol=1e-7, maxsteps=100000)
-#grid_function.vec.data += res_2
-
-#res = grid_function.vec.CreateVector()
-#res.data = f.vec - a.mat * grid_function.vec
-#inv = a.mat.Inverse(freedofs=X.FreeDofs(), inverse="umfpack")
-#grid_function.vec.data += inv * res
 Redraw()
 input("press enter to stop")
