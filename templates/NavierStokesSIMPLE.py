@@ -150,16 +150,16 @@ class NavierStokes:
             temp = self.a.mat.CreateColVector()
 
             if iterative:
+                p, q = self.Q.TnT()
+                u, v = self.V.TnT()
 
                 blfA = BilinearForm(self.X, eliminate_hidden=True, condense=False)
                 blfA += self.stokesA
-                preA = Preconditioner(blfA, "bddc")
+                preA = Preconditioner(blfA, "local")
                 blfA.Assemble()
 
                 temp.data = -blfA.mat * self.gfu.vec + self.f.vec
 
-                p, q = self.Q.TnT()
-                u, v = self.V.TnT()
                 g = LinearForm(self.Q)
                 g.Assemble()
 
@@ -172,19 +172,10 @@ class NavierStokes:
                 blfB += div(u) * q * dx
                 blfB.Assemble()
 
-                # self.invmstar1 = CGSolver(self.astokes.mat, pre=self.premstar, precision=1e-4, printrates=False)
-
                 sol2 = BlockVector([temp, g.vec])
-                BramblePasciakCG(blfA, blfB, None, self.f.vec, g.vec, preA, preM, sol2, initialize=False, tol=1e-6, maxsteps=100000, rel_err=True)
-                # K = BlockMatrix([[blfA.mat, blfB.mat.T], [blfB.mat, None]])
-                # C = BlockMatrix([[preA, None], [None, preM]])
-                # rhs = BlockVector([self.f.vec, g.vec])
-                # sol = BlockVector([self.gfu.vec, g.vec])
-                #
-                # with TaskManager():  # pajetrace=100*1000*1000):
-                #    MinRes(mat=K, pre=C, rhs=rhs, sol=sol, initialize=False, tol=1e-6, maxsteps=100000)
-                # self.gfu.vec.data += sol2[0]
-                # solvers.MinRes(mat=self.astokes.mat, rhs=temp, pre=self.pre_astokes, initialize=False, sol=self.gfu.vec, tol=1e-5, maxsteps=100)
+                BramblePasciakCG(blfA, blfB, None, self.f.vec, g.vec, preA, preM, sol2, initialize=False, tol=1e-9, maxsteps=100000, rel_err=True)
+                self.gfu.vec.data += sol2[0]
+
             else:
                 temp.data = -self.astokes.mat * self.gfu.vec + self.f.vec
                 inv = self.astokes.mat.Inverse(self.X.FreeDofs(), inverse="sparsecholesky")
