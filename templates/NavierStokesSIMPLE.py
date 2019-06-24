@@ -60,6 +60,8 @@ class NavierStokes:
                        -(((sigma * n) * n) * (v * n) + ((tau * n) * n) * (u * n)) * dS + \
                        (-(sigma * n) * tang(vhat) - (tau * n) * tang(uhat)) * dS
 
+        self.V_trace = div(u) * div(v) * dx
+
         self.astokes = BilinearForm(self.X, eliminate_hidden=True)
         self.astokes += self.stokesA
         self.astokes += 1e12 * nu * div(u) * div(v) * dx
@@ -155,7 +157,8 @@ class NavierStokes:
 
                 blfA = BilinearForm(self.X, eliminate_hidden=True, condense=False)
                 blfA += self.stokesA
-                preA = Preconditioner(blfA, "local")
+                blfA += self.V_trace
+                preA = Preconditioner(blfA, "bddc")
                 blfA.Assemble()
 
                 temp.data = -blfA.mat * self.gfu.vec + self.f.vec
@@ -172,9 +175,9 @@ class NavierStokes:
                 blfB += div(u) * q * dx
                 blfB.Assemble()
 
-                sol2 = BlockVector([temp, g.vec])
-                BramblePasciakCG(blfA, blfB, None, self.f.vec, g.vec, preA, preM, sol2, initialize=False, tol=1e-9, maxsteps=100000, rel_err=True)
-                self.gfu.vec.data += sol2[0]
+                sol = BlockVector([temp, g.vec])
+                BramblePasciakCG(blfA, blfB, None, self.f.vec, g.vec, preA, preM, sol, initialize=False, tol=1e-9, maxsteps=100000, rel_err=True)
+                self.gfu.vec.data += sol[0]
 
             else:
                 temp.data = -self.astokes.mat * self.gfu.vec + self.f.vec

@@ -1,6 +1,6 @@
 from ngsolve import *
 from templates.NavierStokesSIMPLE import *
-
+import netgen.gui
 from netgen.geom2d import SplineGeometry
 
 geo = SplineGeometry()
@@ -17,5 +17,8 @@ with TaskManager():
                              inflow="inlet", outflow="outlet", wall="cyl|wall",
                              uin=CoefficientFunction((1.5 * 4 * y * (0.41 - y) / (0.41 * 0.41), 0))
                              )
-    print("finished constructor", "a" * 80)
+
     navstokes.SolveInitial(iterative=True)
+
+Draw(navstokes.velocity,mesh, "velocity")
+input("end")
