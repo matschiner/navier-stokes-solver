@@ -66,7 +66,7 @@ class NavierStokes:
                        -(((sigma * n) * n) * (v * n) + ((tau * n) * n) * (u * n)) * dS + \
                        (-(sigma * n) * tang(vhat) - (tau * n) * tang(uhat)) * dS
 
-        self.V_trace = 0.5 / nu * div(u) * div(v) * dx
+        self.V_trace = 2 * nu * div(u) * div(v) * dx
 
         self.astokes = BilinearForm(self.X, eliminate_hidden=True)
         self.astokes += self.stokesA
