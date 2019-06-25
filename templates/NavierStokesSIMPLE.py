@@ -6,6 +6,7 @@ from solvers.bramblepasciak import BramblePasciakCG
 
 __all__ = ["NavierStokes"]
 
+
 class NavierStokes:
 
     def __init__(self, mesh, nu, inflow, outflow, wall, uin, timestep, order=2, volumeforce=None):
@@ -37,14 +38,12 @@ class NavierStokes:
                 self.X.SetCouplingType(i, COUPLING_TYPE.INTERFACE_DOF)
         self.v1dofs = self.X.Range(0)
 
-        #for iterative method
+        # for iterative method
         self.X2 = FESpace([V, Vhat, Sigma, S])
         for f in mesh.facets:
             self.X2.SetCouplingType(V.GetDofNrs(f)[1], COUPLING_TYPE.WIREBASKET_DOF)
             self.X2.SetCouplingType(V.ndof + Vhat.GetDofNrs(f)[1], COUPLING_TYPE.WIREBASKET_DOF)
 
-        
-        
         u, uhat, sigma, W = self.X.TrialFunction()
         v, vhat, tau, R = self.X.TestFunction()
 
@@ -147,6 +146,10 @@ class NavierStokes:
     def pressure(self):
         return 1e6 / self.nu * div(self.gfu.components[0])
 
+    @property
+    def pressureExpl(self):
+        return self.gfp
+
     def SolveInitial(self, timesteps=None, iterative=True):
         self.a.Assemble()
         self.f.Assemble()
@@ -155,24 +158,17 @@ class NavierStokes:
         self.gfu.components[1].Set(self.uin, definedon=self.X.mesh.Boundaries(self.inflow))
 
         if not timesteps:
-            self.astokes.Assemble()
-            temp = self.a.mat.CreateColVector()
-            temp2 = self.a.mat.CreateColVector()
-            
-            if iterative:                
+            if iterative:
                 p, q = self.Q.TnT()
                 u, uhat, sigma, W = self.X2.TrialFunction()
-                v, vhat, tau, R = self.X2.TestFunction()
-                #u, v = self.X.TnT()
+                # v, vhat, tau, R = self.X2.TestFunction()
 
-                blfA = BilinearForm(self.X2, eliminate_hidden=True, condense=False)
+                blfA = BilinearForm(self.X2, eliminate_hidden=True, condense=True)
                 blfA += self.stokesA
                 blfA += self.V_trace
                 preA = Preconditioner(blfA, "bddc")
                 blfA.Assemble()
 
-                temp.data = -blfA.mat * self.gfu.vec + self.f.vec
-                
                 g = LinearForm(self.Q)
                 g.Assemble()
 
@@ -185,19 +181,14 @@ class NavierStokes:
                 blfB += div(u) * q * dx
                 blfB.Assemble()
 
-                temp3 = mp.mat.CreateColVector()
-                temp4 = mp.mat.CreateColVector()
-                temp3.data = -blfB.mat * self.gfu.vec             
-                
-                #sol = BlockVector([temp, g.vec])
-                sol = BlockVector([temp2, temp4])
-                sol[:] = 0                              
-                
-                #BramblePasciakCG(blfA, blfB, None, self.f.vec, g.vec, preA, preM, sol, initialize=False, tol=1e-9, maxsteps=100000, rel_err=True)
-                BramblePasciakCG(blfA, blfB, None, temp, temp3, preA, preM, sol, initialize=False, tol=1e-9, maxsteps=100000, rel_err=True)
-                self.gfu.vec.data += sol[0]
-                
-            else:        
+                self.gfp = GridFunction(self.Q)
+                self.gfp.vec.data = g.vec
+                sol = BlockVector([self.gfu.vec, self.gfp.vec])
+                BramblePasciakCG(blfA, blfB, None, self.f.vec, g.vec, preA, preM, sol, initialize=False, tol=1e-9, maxsteps=100000, rel_err=True)
+
+            else:
+                self.astokes.Assemble()
+                temp = self.a.mat.CreateColVector()
                 temp.data = -self.astokes.mat * self.gfu.vec + self.f.vec
                 inv = self.astokes.mat.Inverse(self.X.FreeDofs(), inverse="sparsecholesky")
 

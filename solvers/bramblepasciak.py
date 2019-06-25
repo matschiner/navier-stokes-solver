@@ -5,17 +5,19 @@ from ngsolve import Projector, Norm
 from ngsolve.ngstd import Timer
 
 
-def harmonic_extension(f, blfA, inverse, result=None):
+def harmonic_extension(f, blf, inverse, result=None):
     if result is None:
         result = inverse.CreateColVector()
-    if blfA.condense:
+    if blf.condense:
 
         f_residual = f.Copy()
-        f_residual.data += blfA.harmonic_extension_trans * f_residual
+        f_residual.data += blf.harmonic_extension_trans * f_residual
+        f_residual_projected = f_residual.CreateVector()
+        f_residual_projected.data = Projector(blf.space.FreeDofs(True), True) * f_residual
 
-        result.data = inverse * f_residual
-        result.data += blfA.harmonic_extension * result
-        result.data += blfA.inner_solve * f_residual
+        result.data = inverse * f_residual_projected
+        result.data += blf.harmonic_extension * result
+        result.data += blf.inner_solve * f_residual
         return result
     else:
         result.data = inverse * f
@@ -179,7 +181,7 @@ def BramblePasciakCG(blfA, blfB, matC, f, g, preA_unscaled, preM, sol=None, tol=
         matB_s1.data = matB_tranposed * s[1]
         tmp0.data = matA_s0 + matB_s1
         # tmp1.data = preA * tmp0
-        harmonic_extension(f=tmp0, blfA=blfA, inverse=preA, result=tmp1)
+        harmonic_extension(f=tmp0, blf=blfA, inverse=preA, result=tmp1)
         tmp2.data = matA * tmp1
 
         tmp4.data = tmp1 - s[0]

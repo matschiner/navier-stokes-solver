@@ -20,5 +20,8 @@ with TaskManager():
 
     navstokes.SolveInitial(iterative=True)
 
-Draw(navstokes.velocity,mesh, "velocity")
+Draw(navstokes.velocity, mesh, "velocity")
+Draw(navstokes.pressure, mesh, "pressure")
+Draw(navstokes.pressureExpl, mesh, "pressureExpl")
+
 input("end")
