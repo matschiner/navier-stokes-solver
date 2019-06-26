@@ -4,24 +4,23 @@ from math import sqrt
 from ngsolve import Projector, Norm
 from ngsolve.ngstd import Timer
 
-
+"""
 def harmonic_extension(f, blf, inverse, result=None):
     if result is None:
         result = inverse.CreateColVector()
-    if blf.condense:
+    if False and blf.condense:
 
         f_residual = f.Copy()
         f_residual.data += blf.harmonic_extension_trans * f_residual
-        f_residual_projected = f_residual.CreateVector()
-        f_residual_projected.data = Projector(blf.space.FreeDofs(True), True) * f_residual
-
-        result.data = inverse * f_residual_projected
+        #f_residual_projected = f_residual.CreateVector()
+        #f_residual_projected.data = Projector(blf.space.FreeDofs(True), True) * f_residual
+        result.data = inverse * f_residual
         result.data += blf.harmonic_extension * result
         result.data += blf.inner_solve * f_residual
         return result
     else:
         result.data = inverse * f
-        return result
+        return result"""
 
 
 def BramblePasciakCG(blfA, blfB, matC, f, g, preA_unscaled, preM, sol=None, tol=1e-6, maxsteps=100, printrates=True,
@@ -90,7 +89,7 @@ def BramblePasciakCG(blfA, blfB, matC, f, g, preA_unscaled, preM, sol=None, tol=
     timer_prep.Start()
     timer_prepev = Timer("BPCG-Preparation-EV")
     timer_prepev.Start()
-    lams = EigenValues_Preconditioner(mat=matA, pre=preA_unscaled, tol=1e-3)
+    lams = EigenValues_Preconditioner(mat=matA, pre=preA_unscaled, tol=1e-5)
     timer_prepev.Stop()
     # print("min", min(lams), "max", max(lams))
     k = 1. / min(lams) + 1e-3
@@ -101,8 +100,8 @@ def BramblePasciakCG(blfA, blfB, matC, f, g, preA_unscaled, preM, sol=None, tol=
 
     f_new = matA.CreateColVector()
 
-    # tmp0.data = preA * f
-    tmp0 = harmonic_extension(f, blfA, preA)
+    tmp0 = preA.CreateColVector()
+    tmp0.data = preA * f
     f_new.data = matA * tmp0 - f
 
     g_new = matB.CreateColVector()
@@ -133,8 +132,7 @@ def BramblePasciakCG(blfA, blfB, matC, f, g, preA_unscaled, preM, sol=None, tol=
     matB_s1 = matB.CreateRowVector()
 
     tmp0.data = matA * u[0] + matB.T * u[1]
-    # tmp1.data = preA * tmp0
-    harmonic_extension(tmp0, blfA, preA, tmp1)
+    tmp1.data = preA * tmp0
     tmp2.data = matA * tmp1
 
     tmp4.data = tmp1 - u[0]
@@ -145,8 +143,7 @@ def BramblePasciakCG(blfA, blfB, matC, f, g, preA_unscaled, preM, sol=None, tol=
     d[1].data = rhs[1] - tmp3
 
     pr = rhs.CreateVector()
-    harmonic_extension(f, blfA, preA, pr[0])
-    # pr[0].data = preA * f
+    pr[0].data = preA * f
 
     tmp5 = matB.CreateColVector()
     tmp5.data = matB * pr[0] - g
@@ -180,8 +177,7 @@ def BramblePasciakCG(blfA, blfB, matC, f, g, preA_unscaled, preM, sol=None, tol=
             matA_s0.data = beta * matA_s0 + z_old[0] - alpha * tmp2
         matB_s1.data = matB_tranposed * s[1]
         tmp0.data = matA_s0 + matB_s1
-        # tmp1.data = preA * tmp0
-        harmonic_extension(f=tmp0, blf=blfA, inverse=preA, result=tmp1)
+        tmp1.data = preA * tmp0
         tmp2.data = matA * tmp1
 
         tmp4.data = tmp1 - s[0]

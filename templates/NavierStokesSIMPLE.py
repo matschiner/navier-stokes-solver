@@ -184,8 +184,12 @@ class NavierStokes:
                 self.gfp = GridFunction(self.Q)
                 self.gfp.vec.data = g.vec
                 sol = BlockVector([self.gfu.vec, self.gfp.vec])
+                if blfA.condense:
+                    self.f.vec.data += blfA.harmonic_extension_trans * self.f.vec
                 BramblePasciakCG(blfA, blfB, None, self.f.vec, g.vec, preA, preM, sol, initialize=False, tol=1e-9, maxsteps=100000, rel_err=True)
-
+                if blfA.condense:
+                    sol[0].data += blfA.harmonic_extension * sol[0]
+                    sol[0].data += blfA.inner_solve * self.f.vec
             else:
                 self.astokes.Assemble()
                 temp = self.a.mat.CreateColVector()

@@ -4,6 +4,7 @@ from solvers.krylovspace import *
 from solvers.krylovspace import MinRes
 from solvers.bramblepasciak import BramblePasciakCG as BPCG
 from multiplicative_precond.preconditioners import MultiplicativePrecond
+import netgen.gui
 
 ngsglobals.msg_level = 0
 
@@ -47,7 +48,7 @@ def spaces_test(precon="bddc"):
 
     dS = dx(element_boundary=True)
 
-    a = BilinearForm(V, eliminate_hidden=True, condense=False)
+    a = BilinearForm(V, eliminate_hidden=True, condense=True)
     a += -InnerProduct(sigma, tau) * dx
     a += div(sigma) * v * dx + div(tau) * u * dx
     a += -(sigma * n) * n * (v * n) * dS
@@ -114,10 +115,16 @@ def spaces_test(precon="bddc"):
     sol2[1].data = gfp.vec
 
     # Draw(x - 0.5, mesh, "source")
+    if a.condense:
+        f.vec.data += a.harmonic_extension_trans * f.vec
 
     with TaskManager():  # pajetrace=100 * 1000 * 1000):
         bramblePasciakTimer.Start()
+
         results["nits_bpcg"] = BPCG(a, b, None, f.vec, g.vec, preA, preM, sol2, initialize=False, tol=1e-6, maxsteps=100000, rel_err=True)
+        if a.condense:
+            sol2[0].data += a.harmonic_extension * sol2[0]
+            sol2[0].data += a.inner_solve * f.vec
         bramblePasciakTimer.Stop()
         results["time_bpcg"] = bramblePasciakTimer.time
 
@@ -129,6 +136,10 @@ def spaces_test(precon="bddc"):
     with TaskManager():  # pajetrace=100*1000*1000):
         minResTimer.Start()
         tmp, results["nits_minres"] = MinRes(mat=K, pre=C, rhs=rhs, sol=sol, initialize=False, tol=1e-6, maxsteps=100000)
+        if a.condense:
+            sol[0].data += a.harmonic_extension * sol[0]
+            sol[0].data += a.inner_solve * f.vec
+
         minResTimer.Stop()
         results["time_minres"] = minResTimer.time
 
