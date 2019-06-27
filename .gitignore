@@ -3,3 +3,4 @@ ng.ini
 *.trace.html
 __pycache__/
 errors.csv
+data/
