@@ -330,27 +330,28 @@ class NavierStokes:
                 blocks = []
                 for e in mesh.edges:
                     blocks.append ( [d for d in self.X2.GetDofNrs(e) if self.X2.FreeDofs(True)[d]])
+
                 
                 class MypreA(BaseMatrix):
-                    def __init__ (self, space, a, jacblocks):                        
+                    def __init__ (self, space, a, jacblocks, GS):                        
                         super(MypreA, self).__init__()
                         self.space = space
                         self.mat = a.mat
                         self.temp = a.mat.CreateColVector()
+                        self.GS = GS
                         
                         #self.jacobi = a.mat.CreateSmoother(a.space.FreeDofs(elinternal))
                         self.jacobi = a.mat.CreateBlockSmoother(jacblocks)
 
                     def Mult(self, x, y):
-                        '''
-                        y[:] = 0
-                        self.jacobi.Smooth(y,x)
-                        self.temp.data = x - self.mat * y
-                        y.data += ((transform @ preAh1 @ transform.T)) * self.temp            
-                        self.jacobi.SmoothBack(y,x)
-                        '''                        
-                        y.data = ((transform @ preAh1 @ transform.T) + self.jacobi) * x
-                        #y.data = ((transform @ preAh1 @ transform.T) + preAloc) * x                        
+                        if GS:
+                            y[:] = 0
+                            self.jacobi.Smooth(y,x)
+                            self.temp.data = x - self.mat * y
+                            y.data += ((transform @ preAh1 @ transform.T)) * self.temp            
+                            self.jacobi.SmoothBack(y,x)
+                        else:                                                
+                            y.data = ((transform @ preAh1 @ transform.T) + self.jacobi) * x
 
                     def Height(self):
                         return self.space.ndof
@@ -359,7 +360,9 @@ class NavierStokes:
                         return self.space.ndof
 
                     
-                preA = MypreA(self.X2, blfA, blocks)
+                #preA = MypreA(self.X2, blfA, blocks, GS = True)
+                preA = MypreA(self.X2, blfA, blocks, GS = False)
+                
                 #preA = preAbddc
                 #######################             
                 
