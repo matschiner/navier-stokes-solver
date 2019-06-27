@@ -1,12 +1,14 @@
 from ngsolve import *
 from ngsolve.krylovspace import MinRes
 
-from mt_global import *
+#from mt_global import *
 import sys
 sys.path.append('../')
 from solvers.bramblepasciak_new import BramblePasciakCG
 
 __all__ = ["NavierStokes"]
+
+realcompile = True
 
 class NavierStokes:
 
