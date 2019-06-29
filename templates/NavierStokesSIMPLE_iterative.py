@@ -46,7 +46,7 @@ class NavierStokes:
         for f in mesh.facets:
             self.X2.SetCouplingType(V.GetDofNrs(f)[1], COUPLING_TYPE.WIREBASKET_DOF)
             self.X2.SetCouplingType(V.ndof + Vhat.GetDofNrs(f)[1], COUPLING_TYPE.WIREBASKET_DOF)
-        
+
         u, uhat, sigma, W = self.X.TrialFunction()
         v, vhat, tau, R = self.X.TestFunction()
 
@@ -143,18 +143,18 @@ class NavierStokes:
                 ind[d1] = d2
         self.mapV = PermutationMatrix(self.Xproj.ndof, ind)
 
-        
+
         #self.fesh1_1 = H1(mesh, order=order, orderinner = order, dirichlet=inflow + "|" + wall)
         #self.fesh1_2 = H1(mesh, order=order, orderinner = order, dirichlet=inflow + "|" + wall + "|" + outflow)
 
         if mesh.dim == 2:
             self.fesh1_1 = H1(mesh, order=1, dirichlet=inflow + "|" + wall)
-            self.fesh1_2 = H1(mesh, order=1, dirichlet=inflow + "|" + wall + "|" + outflow)            
+            self.fesh1_2 = H1(mesh, order=1, dirichlet=inflow + "|" + wall + "|" + outflow)
             self.fesh1 = FESpace([self.fesh1_1,self.fesh1_2])
         else:
             self.fesh1_1 = H1(mesh, order=1, dirichlet=inflow + "|" + wall)
             self.fesh1_2 = H1(mesh, order=1, dirichlet=inflow + "|" + wall + "|" + outflow)
-            self.fesh1_3 = H1(mesh, order=1, dirichlet=inflow + "|" + wall + "|" + outflow)            
+            self.fesh1_3 = H1(mesh, order=1, dirichlet=inflow + "|" + wall + "|" + outflow)
             self.fesh1 = FESpace([self.fesh1_1,self.fesh1_2,self.fesh1_3])
 
     @property
@@ -166,7 +166,7 @@ class NavierStokes:
         return -self.gfup
         #return 1e6 / self.nu * div(self.gfu.components[0])
 
-    def SolveInitial(self, timesteps=None, iterative=True):
+    def SolveInitial(self, timesteps=None, iterative=True, GS=True):
         self.a.Assemble()
         self.f.Assemble()
 
@@ -180,8 +180,8 @@ class NavierStokes:
 
             # False does not work anymore!
             elinternal = True
-            
-            if iterative:                
+
+            if iterative:
                 p, q = self.Q.TnT()
                 u, uhat, sigma, W = self.X2.TrialFunction()
                 v, vhat, tau, R = self.X2.TestFunction()
@@ -197,8 +197,8 @@ class NavierStokes:
                     blfAmat = (IdentityMatrix() - blfA.harmonic_extension_trans) @ (blfA.mat + blfA.inner_matrix) @ (IdentityMatrix() - blfA.harmonic_extension)
                     temp.data = -blfAmat * self.gfu.vec + self.f.vec
                 else:
-                    temp.data = -blfA.mat * self.gfu.vec + self.f.vec              
-                
+                    temp.data = -blfA.mat * self.gfu.vec + self.f.vec
+
                 g = LinearForm(self.Q)
                 g.Assemble()
 
@@ -213,14 +213,14 @@ class NavierStokes:
 
                 temp3 = mp.mat.CreateColVector()
                 temp4 = mp.mat.CreateColVector()
-                temp3.data = -blfB.mat * self.gfu.vec             
-                
+                temp3.data = -blfB.mat * self.gfu.vec
+
                 sol = BlockVector([temp2, temp4])
                 sol[:] = 0
 
                 # mats for transformation
                 ###################
-                
+
                 amixed = BilinearForm(trialspace=self.fesh1, testspace=self.X2)
                 acomp = BilinearForm(self.X2)
 
@@ -234,8 +234,8 @@ class NavierStokes:
                 else:
                     (uh1_1,uh1_2, uh1_3),(vh1_1,vh1_2, vh1_3) = self.fesh1.TnT()
                     uh1 = CoefficientFunction((uh1_1,uh1_2, uh1_3))
-                    vh1 = CoefficientFunction((vh1_1,vh1_2, vh1_3))                    
-                
+                    vh1 = CoefficientFunction((vh1_1,vh1_2, vh1_3))
+
                 #uh1,vh1 = self.fesh1.TnT()
 
                 dS = dx(element_boundary=True)
@@ -245,7 +245,7 @@ class NavierStokes:
 
                 def tang(u):
                     return u - (u * n) * n
-                               
+
                 if not elinternal:
                     acomp += u*vdual * dx
                 acomp += u*vdual * dS
@@ -254,7 +254,7 @@ class NavierStokes:
 
                 if not elinternal:
                     amixed += uh1*vdual * dx
-                
+
                 amixed += uh1*vdual * dS
                 amixed += uh1*tang(vhat) * dS
                 amixed.Assemble()
@@ -266,15 +266,15 @@ class NavierStokes:
                 einv = acomp.mat.CreateBlockSmoother(eblocks)
                 """
                 fblocks = []
-                
+
                 for f in mesh.faces:
                     # remove hidden dofs (=-2)
                     fblocks.append ( [d for d in self.X2.GetDofNrs(f) if d != -2] )
-                
-                
+
+
                 finv = acomp.mat.CreateBlockSmoother(fblocks)
                 """
-                
+
                 class MyBasisTrafo(BaseMatrix):
                     def __init__ (self, mat, eblocks):
                         super(MyBasisTrafo, self).__init__()
@@ -313,23 +313,23 @@ class NavierStokes:
 
                 grad_uh1 = CoefficientFunction((grad(uh1_1), grad(uh1_2)), dims = (2,2))
                 grad_vh1 = CoefficientFunction((grad(vh1_1), grad(vh1_2)), dims = (2,2))
-                
+
                 aH1 += 2 * self.nu * InnerProduct(eps_uh1,eps_vh1) * dx
                 #aH1 += self.nu * InnerProduct(grad_uh1,grad_vh1) * dx
                 preAh1 = Preconditioner(aH1, 'bddc') #, coarsetype="h1amg")
-                                
+
                 aH1.Assemble()
                 """
                 if mesh.dim ==2 :
                     uh1_1,vh1_1 = self.fesh1_1.TnT()
                     uh1_2,vh1_2 = self.fesh1_2.TnT()
-    
+
                     aH1_1 = BilinearForm(self.fesh1_1)
                     aH1_1 += self.nu * InnerProduct(grad(uh1_1),grad(vh1_1)) * dx
 
                     aH1_2 = BilinearForm(self.fesh1_2)
                     aH1_2 += self.nu * InnerProduct(grad(uh1_2),grad(vh1_2)) * dx
-    
+
                     preAh1_1 = Preconditioner(aH1_1, 'h1amg')
                     aH1_1.Assemble()
 
@@ -338,13 +338,13 @@ class NavierStokes:
 
                     emb_comp1 = Embedding(self.fesh1.ndof,self.fesh1.Range(0))
                     emb_comp2 = Embedding(self.fesh1.ndof,self.fesh1.Range(1))
-    
+
                     preAh1 = emb_comp1 @ preAh1_1 @ emb_comp1.T + emb_comp2 @ preAh1_2 @ emb_comp2.T
                 else:
                     uh1_1,vh1_1 = self.fesh1_1.TnT()
                     uh1_2,vh1_2 = self.fesh1_2.TnT()
                     uh1_3,vh1_3 = self.fesh1_3.TnT()
-    
+
                     aH1_1 = BilinearForm(self.fesh1_1)
                     aH1_1 += self.nu * InnerProduct(grad(uh1_1),grad(vh1_1)) * dx
 
@@ -353,7 +353,7 @@ class NavierStokes:
 
                     aH1_3 = BilinearForm(self.fesh1_3)
                     aH1_3 += self.nu * InnerProduct(grad(uh1_3),grad(vh1_3)) * dx
-    
+
                     preAh1_1 = Preconditioner(aH1_1, 'h1amg')
                     aH1_1.Assemble()
 
@@ -362,26 +362,26 @@ class NavierStokes:
 
                     preAh1_3 = Preconditioner(aH1_3, 'h1amg')
                     aH1_3.Assemble()
-                    
+
                     emb_comp1 = Embedding(self.fesh1.ndof,self.fesh1.Range(0))
                     emb_comp2 = Embedding(self.fesh1.ndof,self.fesh1.Range(1))
                     emb_comp3 = Embedding(self.fesh1.ndof,self.fesh1.Range(2))
-    
+
                     preAh1 = emb_comp1 @ preAh1_1 @ emb_comp1.T + emb_comp2 @ preAh1_2 @ emb_comp2.T + emb_comp3 @ preAh1_3 @ emb_comp3.T
 
                 # BlockJacobi for H(div)-velocity space
                 blocks = []
                 for e in mesh.facets:
                     blocks.append ( [d for d in self.X2.GetDofNrs(e) if self.X2.FreeDofs(True)[d]])
-                
+
                 class MypreA(BaseMatrix):
-                    def __init__ (self, space, a, jacblocks, GS):                        
+                    def __init__ (self, space, a, jacblocks, GS):
                         super(MypreA, self).__init__()
                         self.space = space
                         self.mat = a.mat
                         self.temp = a.mat.CreateColVector()
                         self.GS = GS
-                        
+
                         #self.jacobi = a.mat.CreateSmoother(a.space.FreeDofs(elinternal))
                         self.jacobi = a.mat.CreateBlockSmoother(jacblocks)
 
@@ -390,9 +390,9 @@ class NavierStokes:
                             y[:] = 0
                             self.jacobi.Smooth(y,x)
                             self.temp.data = x - self.mat * y
-                            y.data += ((transform @ preAh1 @ transform.T)) * self.temp            
+                            y.data += ((transform @ preAh1 @ transform.T)) * self.temp
                             self.jacobi.SmoothBack(y,x)
-                        else:                                                
+                        else:
                             y.data = ((transform @ preAh1 @ transform.T) + self.jacobi) * x
 
                     def Height(self):
@@ -401,19 +401,21 @@ class NavierStokes:
                     def Width(self):
                         return self.space.ndof
 
-                    
-                preA = MypreA(self.X2, blfA, blocks, GS = True)
+
+                preA = MypreA(self.X2, blfA, blocks, GS = GS)
                 #preA = MypreA(self.X2, blfA, blocks, GS = False)
-                
+
                 #preA = preAbddc
-                #######################             
-                
+                #######################
+
                 #BramblePasciakCG(blfA, blfB, None, self.f.vec, g.vec, preA, preM, sol, initialize=False, tol=1e-9, maxsteps=100000, rel_err=True)
-                BramblePasciakCG(blfA, blfB, None, temp, temp3, preA, preM, sol, initialize=False, tol=1e-10, maxsteps=100000, rel_err=True)
+                iterations, time = BramblePasciakCG(blfA, blfB, None, temp, temp3, preA, preM, sol, initialize=False, tol=1e-10, maxsteps=100000, rel_err=True)
+                self.stokes_bpcg_iterations = iterations
+                self.stokes_bpcg_time = time
                 self.gfu.vec.data += sol[0]
                 self.gfup.vec.data = -sol[1]
-                
-            else:        
+
+            else:
                 temp.data = -self.astokes.mat * self.gfu.vec + self.f.vec
                 inv = self.astokes.mat.Inverse(self.X.FreeDofs(), inverse="sparsecholesky")
 

@@ -8,7 +8,7 @@ from ngsolve.ngstd import Timer
 def harmonic_extension(f, blfA, inverse, result=None):
     if result is None:
         result = inverse.CreateColVector()
-    if blfA.condense:        
+    if blfA.condense:
         f_residual = f.Copy()
         f_residual.data += blfA.harmonic_extension_trans * f_residual
 
@@ -82,17 +82,17 @@ def BramblePasciakCG(blfA, blfB, matC, f, g, preA_unscaled, preM, sol=None, tol=
     """
 
     class myAmatrix(BaseMatrix):
-        def __init__ (self, blfA):
+        def __init__(self, blfA):
             super(myAmatrix, self).__init__()
             self.blfA = blfA
             self.mat = (IdentityMatrix() - blfA.harmonic_extension_trans) @ (blfA.mat + blfA.inner_matrix) @ (IdentityMatrix() - blfA.harmonic_extension)
-            
+
         def Mult(self, x, y):
             y.data = self.mat * x
 
         def Height(self):
             return self.blfA.mat.height
-            
+
         def Width(self):
             return self.blfA.mat.width
 
@@ -126,7 +126,7 @@ def BramblePasciakCG(blfA, blfB, matC, f, g, preA_unscaled, preM, sol=None, tol=
     # tmp0.data = preA * f
     #tmp0 = harmonic_extension(f, blfA, preA)
     tmp0 = f.CreateVector()
-    harmonic_extension(f, blfA, preA, result = tmp0)
+    harmonic_extension(f, blfA, preA, result=tmp0)
     f_new.data = matA * tmp0 - f
 
     g_new = matB.CreateColVector()
@@ -242,7 +242,7 @@ def BramblePasciakCG(blfA, blfB, matC, f, g, preA_unscaled, preM, sol=None, tol=
 
         err = sqrt(abs(wd))
         if printrates:
-            print("\rit = ", it, " err = ", err, " " * 20, end="")
+            print("it = ", it, " err = ", err, " " * 20)
         if err < tol * (err0 if rel_err else 1):
             break
     else:
@@ -250,4 +250,4 @@ def BramblePasciakCG(blfA, blfB, matC, f, g, preA_unscaled, preM, sol=None, tol=
 
     timer_its.Stop()
     print("\n")
-    return it
+    return (it, timer_its.time)
