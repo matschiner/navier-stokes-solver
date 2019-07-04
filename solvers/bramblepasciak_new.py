@@ -13,8 +13,8 @@ def harmonic_extension(f, blfA, inverse, result=None):
         f_residual.data += blfA.harmonic_extension_trans * f_residual
 
         result.data = inverse * f_residual
-        result.data += blfA.inner_solve * f_residual
         result.data += blfA.harmonic_extension * result
+        result.data += blfA.inner_solve * f_residual
         return result
     else:
         result.data = inverse * f
