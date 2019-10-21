@@ -6,17 +6,17 @@ from solvers.bramblepasciak import BramblePasciakCG as BPCG
 from multiplicative_precond.preconditioners import MultiplicativePrecond
 # import netgen.gui
 from embedding.helpers import CreateEmbeddingPreconditioner
+from blockjacobi_parallel import *
 
 ngsglobals.msg_level = 0
 
 # viscosity
-nu = 1# 1e-3
+nu = 1  # 1e-3
 
 # timestepping parameters
 tau = 0.001
 tend = 10
 order = 3
-
 
 comm = mpi_world
 rank = comm.rank
@@ -24,10 +24,10 @@ np = comm.size
 
 from netgen.geom2d import SplineGeometry
 
-#geom = SplineGeometry()
-#geom.AddRectangle((0, 0), (2, 0.41), bcs=("wall", "outlet", "wall", "inlet"))
-#geom.AddCircle((0.2, 0.2), r=0.05, leftdomain=0, rightdomain=1, bc="cyl")
-#diri = "wall|inlet|cyl"
+# geom = SplineGeometry()
+# geom.AddRectangle((0, 0), (2, 0.41), bcs=("wall", "outlet", "wall", "inlet"))
+# geom.AddCircle((0.2, 0.2), r=0.05, leftdomain=0, rightdomain=1, bc="cyl")
+# diri = "wall|inlet|cyl"
 
 geom = netgen.geom2d.unit_square
 diri = "left"
@@ -61,7 +61,6 @@ def spaces_test(precon="bddc"):
     Sigma = Compress(Sigma)
 
     V = FESpace([V1, VHat, Sigma])
-    
 
     (u, u_hat, sigma), (v, v_hat, tau) = V.TnT()
     p, q = Q.TnT()
@@ -116,19 +115,20 @@ def spaces_test(precon="bddc"):
         t1 = a.mat.CreateRowVector()
         t2 = a.mat.CreateRowVector()
         t2.data = Ahat_inv * t1
-        
+
         # pre_jacobi = a.mat.CreateSmoother(X.FreeDofs(condense))
 
         x_free = V.FreeDofs(condense)
         # blocks = [[d for d in dofnrs if d
-                   # > 0 and x_free[d]] for (e, dofnrs) in zip(mesh.Elements(), [V.GetDofNrs(e) for e in mesh.Elements()])]
+        # > 0 and x_free[d]] for (e, dofnrs) in zip(mesh.Elements(), [V.GetDofNrs(e) for e in mesh.Elements()])]
         # blocks = [[d for d in dofnrs if x_free[d]] for dofnrs in (V.GetDofNrs(e) for e in mesh.facets) if len(dofnrs) > 0]
 
         blocks = [[d for d in dofnrs if x_free[d]] for dofnrs in (V.GetDofNrs(e) for e in mesh.facets) if len(dofnrs) > 0] \
-                 + [list(d for d in ar if d >= 0 and x_free[d]) for ar in (V.GetDofNrs(NodeId(FACE,k)) for k in range(mesh.nface))]
-        
-        #blocks = [list(d for d in ar if d >= 0 and x_free[d]) for ar in (V.GetDofNrs(e) for e in mesh.Elements())]
-        
+                 + [list(d for d in ar if d >= 0 and x_free[d]) for ar in (V.GetDofNrs(NodeId(FACE, k)) for k in range(mesh.nface))]
+
+        # blocks = [list(d for d in ar if d >= 0 and x_free[d]) for ar in (V.GetDofNrs(e) for e in mesh.Elements())]
+
+        BlockJacobiParallel(a.mat, [[1, 2, 3]])
         pre_blockjacobi = a.mat.CreateBlockSmoother(blocks) if mpi_world.size == 1 else a.mat.local_mat.CreateBlockSmoother(blocks, parallel=True)
         preA = pre_blockjacobi + Ahat_inv
     else:
@@ -171,7 +171,6 @@ def spaces_test(precon="bddc"):
     tmp1 = a.mat.CreateColVector()
     tmp1[:] = 1
     CG(mat=a.mat, pre=preA, rhs=tmp1, sol=gfu.vec, printrates=True)
-
 
     with TaskManager():  # pajetrace=100*1000*1000):
         minResTimer.Start()
