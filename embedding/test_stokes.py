@@ -10,7 +10,7 @@ from embedding.helpers import CreateEmbeddingPreconditioner
 ngsglobals.msg_level = 0
 
 # viscosity
-nu = 1e-3
+nu = 1#e-3
 
 # timestepping parameters
 tau = 0.001
@@ -62,8 +62,6 @@ def spaces_test(precon="embedded"):
     b = BilinearForm(trialspace=V, testspace=Q)
     b += div(u) * q * dx
 
-    Ahat_inv = CreateEmbeddingPreconditioner(V, nu)
-
     minResTimer = Timer("MinRes")
     preconTimer = Timer("Precon")
 
@@ -87,6 +85,8 @@ def spaces_test(precon="embedded"):
         preCoarse = a.mat.Inverse(vertexdofs, inverse="sparsecholesky")
         preA = MultiplicativePrecond(preJpoint, preCoarse, a.mat)
     elif precon == "embedded":
+        Ahat_inv = CreateEmbeddingPreconditioner(V, nu)
+
         a.Assemble()
         b.Assemble()
 

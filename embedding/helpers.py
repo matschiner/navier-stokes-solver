@@ -38,10 +38,16 @@ class EmbeddingTransformation(BaseMatrix):
         # y.data = M.mat.T * tmp
 
     def CreateRowVector(self):
-        return self.Mw.mat.CreateRowVector()
+        return self.M.mat.CreateRowVector()
 
     def CreateColVector(self):
         return self.Mw.mat.CreateColVector()
+
+    def Width(self):
+        return self.Mw.mat.width
+
+    def Height(self):
+        return self.M.mat.height
 
 
 def CreateEmbeddingPreconditioner(X, nu, condense=False):
@@ -81,9 +87,9 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False):
     laplaceH1 = BilinearForm(VH1, condense=condense)
     laplaceH1 += nu * InnerProduct(grad(vH1trial), grad(vH1test)) * dx
 
-    # laplaceH1_inverse = Preconditioner(laplaceH1, "direct")
+    laplaceH1_inverse = Preconditioner(laplaceH1, "bddc")
     laplaceH1.Assemble()
-    laplaceH1_inverse = laplaceH1.mat.Inverse(freedofs=VH1.FreeDofs(condense), inverse="sparsecholesky")
+    # laplaceH1_inverse = laplaceH1.mat.Inverse(freedofs=VH1.FreeDofs(condense), inverse="sparsecholesky")
 
     eblocks = []
     for f in mesh.facets:  # edges in 2d, faces in 3d
@@ -103,4 +109,5 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False):
     # gfx.vec.data = emb * gfh1.vec
     # Draw(gfx.components[0])
     # input("lj")
+
     return emb @ laplaceH1_inverse @ emb.T
