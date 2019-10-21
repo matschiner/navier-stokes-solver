@@ -4,17 +4,19 @@ from solvers.krylovspace import *
 from solvers.krylovspace import MinRes
 from solvers.bramblepasciak import BramblePasciakCG as BPCG
 from multiplicative_precond.preconditioners import MultiplicativePrecond
-import netgen.gui
+# import netgen.gui
 from embedding.helpers import CreateEmbeddingPreconditioner
 
 ngsglobals.msg_level = 0
 
 # viscosity
-nu = 1  # e-3
+nu = 1# 1e-3
 
 # timestepping parameters
 tau = 0.001
 tend = 10
+order = 3
+
 
 comm = mpi_world
 rank = comm.rank
@@ -22,13 +24,17 @@ np = comm.size
 
 from netgen.geom2d import SplineGeometry
 
-geom = SplineGeometry()
-geom.AddRectangle((0, 0), (2, 0.41), bcs=("wall", "outlet", "wall", "inlet"))
-geom.AddCircle((0.2, 0.2), r=0.05, leftdomain=0, rightdomain=1, bc="cyl")
+#geom = SplineGeometry()
+#geom.AddRectangle((0, 0), (2, 0.41), bcs=("wall", "outlet", "wall", "inlet"))
+#geom.AddCircle((0.2, 0.2), r=0.05, leftdomain=0, rightdomain=1, bc="cyl")
+#diri = "wall|inlet|cyl"
+
+geom = netgen.geom2d.unit_square
+diri = "left"
 
 if rank == 0:
     # master proc generates and immediately distributes
-    ngmesh = geom.GenerateMesh(maxh=0.5)
+    ngmesh = geom.GenerateMesh(maxh=0.1)
 
     if comm.size > 1:
         ngmesh.Distribute(comm)
@@ -41,21 +47,21 @@ mesh = Mesh(ngmesh)
 
 # mesh = Mesh(unit_square.GenerateMesh(maxh=0.1))
 mesh.Curve(3)
-condense = False
+condense = True
 
 
 def spaces_test(precon="bddc"):
     results = {}
 
-    order = 3
-
-    V1 = HDiv(mesh, order=order, dirichlet="wall|inlet|cyl")
+    V1 = HDiv(mesh, order=order, dirichlet=diri)
     Sigma = HCurlDiv(mesh, order=order - 1, orderinner=order, discontinuous=True)
     VHat = TangentialFacetFESpace(mesh, order=order - 1, dirichlet=".*")
     Q = L2(mesh, order=order - 1)
     Sigma.SetCouplingType(IntRange(0, Sigma.ndof), COUPLING_TYPE.HIDDEN_DOF)
     Sigma = Compress(Sigma)
+
     V = FESpace([V1, VHat, Sigma])
+    
 
     (u, u_hat, sigma), (v, v_hat, tau) = V.TnT()
     p, q = Q.TnT()
@@ -102,16 +108,27 @@ def spaces_test(precon="bddc"):
         preCoarse = a.mat.Inverse(vertexdofs, inverse="sparsecholesky")
         preA = MultiplicativePrecond(preJpoint, preCoarse, a.mat)
     elif precon == "embedded":
-        Ahat_inv = CreateEmbeddingPreconditioner(V, nu)
+        Ahat_inv = CreateEmbeddingPreconditioner(V, nu, diri=diri)
 
         a.Assemble()
         b.Assemble()
 
+        t1 = a.mat.CreateRowVector()
+        t2 = a.mat.CreateRowVector()
+        t2.data = Ahat_inv * t1
+        
         # pre_jacobi = a.mat.CreateSmoother(X.FreeDofs(condense))
+
         x_free = V.FreeDofs(condense)
         # blocks = [[d for d in dofnrs if d
-        #           > 0 and x_free[d]] for (e, dofnrs) in zip(mesh.Elements(), [V.GetDofNrs(e) for e in mesh.Elements()])]
-        blocks = [[d for d in dofnrs if x_free[d]] for dofnrs in (V.GetDofNrs(e) for e in mesh.facets) if len(dofnrs) > 0]
+                   # > 0 and x_free[d]] for (e, dofnrs) in zip(mesh.Elements(), [V.GetDofNrs(e) for e in mesh.Elements()])]
+        # blocks = [[d for d in dofnrs if x_free[d]] for dofnrs in (V.GetDofNrs(e) for e in mesh.facets) if len(dofnrs) > 0]
+
+        blocks = [[d for d in dofnrs if x_free[d]] for dofnrs in (V.GetDofNrs(e) for e in mesh.facets) if len(dofnrs) > 0] \
+                 + [list(d for d in ar if d >= 0 and x_free[d]) for ar in (V.GetDofNrs(NodeId(FACE,k)) for k in range(mesh.nface))]
+        
+        #blocks = [list(d for d in ar if d >= 0 and x_free[d]) for ar in (V.GetDofNrs(e) for e in mesh.Elements())]
+        
         pre_blockjacobi = a.mat.CreateBlockSmoother(blocks) if mpi_world.size == 1 else a.mat.local_mat.CreateBlockSmoother(blocks, parallel=True)
         preA = pre_blockjacobi + Ahat_inv
     else:
@@ -155,7 +172,6 @@ def spaces_test(precon="bddc"):
     tmp1[:] = 1
     CG(mat=a.mat, pre=preA, rhs=tmp1, sol=gfu.vec, printrates=True)
 
-    exit(1)
 
     with TaskManager():  # pajetrace=100*1000*1000):
         minResTimer.Start()
@@ -175,24 +191,22 @@ def spaces_test(precon="bddc"):
     Draw(gfp, mesh, "p")
 
     # Draw(gfu.components[1], mesh, "v_hat")
-    input("end")
 
     return results, V.ndof + Q.ndof
 
 
-spaces_test()
+spaces_test("embedded")
 # spaces_test(V, Q, precon="multi")
-exit(0)
 
-import pandas as pd
+# import pandas as pd
 
-data = pd.DataFrame()
-for j in range(1):
-    print("#" * 100, j)
-    # mesh.Refine()
+# data = pd.DataFrame()
+# for j in range(1):
+#     print("#" * 100, j)
+#     # mesh.Refine()
 
-    print(mesh.nv)
+#     print(mesh.nv)
 
-    result, ndofs = spaces_test()
-# data = data.append({"method": "curldiv", "ndofs": ndofs, "precon": "bddc", "vert": mesh.nv, **result}, ignore_index=True)
-# data.to_csv("bpcg_test_all_nc.csv")
+#     result, ndofs = spaces_test()
+# # data = data.append({"method": "curldiv", "ndofs": ndofs, "precon": "bddc", "vert": mesh.nv, **result}, ignore_index=True)
+# # data.to_csv("bpcg_test_all_nc.csv")
