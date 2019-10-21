@@ -4,13 +4,13 @@ dS = dx(element_boundary=True)
 
 
 class EmbeddingTransformation(BaseMatrix):
-    def __init__(self, M, Mw, Mw_trans, eblocks, fblocks):
+    def __init__(self, M, Mw, eblocks, fblocks):
         super(EmbeddingTransformation, self).__init__()
-        self.smootherE = Mw.mat.CreateBlockSmoother(eblocks)
-        self.smootherF = Mw.mat.CreateBlockSmoother(fblocks)
+        self.smootherE = Mw.mat.CreateBlockSmoother(eblocks) if mpi_world.size==1 else  Mw.mat.local_mat.CreateBlockSmoother(eblocks)
+        self.smootherF = Mw.mat.CreateBlockSmoother(fblocks) if mpi_world.size==1 else  Mw.mat.local_mat.CreateBlockSmoother(fblocks)
         self.M = M
         self.Mw = Mw
-        self.Mw_trans = Mw_trans
+        self.Mw_trans = Mw.mat.CreateTranspose() if mpi_world.size==1 else Mw.mat.local_mat.CreateTranspose()
         # self.smootherReversed = Mw_trans.CreateBlockSmoother(fblocks + eblocks)
 
     def Mult(self, x, y):
@@ -76,7 +76,7 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False):
     Mw += u_hat * tang(v_hat) * dS
     Mw.Assemble()
 
-    Mw_trans = Mw.mat.CreateTranspose()
+
 
     # Mw_inverse = Mw.mat.Inverse(inverse="umfpack")
     # Mw_trans_inverse = Mw_trans.Inverse(inverse="umfpack")
@@ -100,7 +100,7 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False):
         # remove hidden dofs (=-2)
         fblocks.append([d for d in X.GetDofNrs(f) if d != -2])
 
-    emb = EmbeddingTransformation(M, Mw, Mw_trans, eblocks, fblocks)
+    emb = EmbeddingTransformation(M, Mw, eblocks, fblocks)
 
     # test if embedding transformation is doing the right thing
     # gfh1 = GridFunction(VH1)
