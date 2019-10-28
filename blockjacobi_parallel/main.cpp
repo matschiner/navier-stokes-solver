@@ -38,29 +38,60 @@ public:
     const shared_ptr<ParallelDofs> pdofs;
     const py::list blocks;
     Array<FlatMatrix<>> blocks_inverted;
-    AutoVector CreateRowVector(){
+    AutoVector CreateRowVector() const override {
         return make_shared<S_ParallelBaseVectorPtr<Complex>>        (mat->Width(), pdofs->GetEntrySize(), pdofs, DISTRIBUTED);
     }
-    AutoVector CreateColVector(){
+    AutoVector CreateColVector() const override {
         return make_shared<S_ParallelBaseVectorPtr<Complex>>        (mat->Width(), pdofs->GetEntrySize(), pdofs, DISTRIBUTED);
+    }
+    ~BlockJacobiParallel(){
+        
     }
     
-    void MultAdd (double s, const BaseVector & x, BaseVector & y) const
+    int VHeight() const override
     {
+        return mat->VHeight();
+    }
+    
+    int VWidth() const override
+    {
+        return mat->VWidth();
+    }
+    void MultAdd (double s, const BaseVector & x, BaseVector & y) const override
+    {
+        LocalHeap lh(1000000);
         const auto & xpar = dynamic_cast_ParallelBaseVector(x);
         auto & ypar = dynamic_cast_ParallelBaseVector(y);
         
-        if (op & char(2))
-            x.Cumulate();
-        else
-            x.Distribute();
-        if (op & char(1))
-            y.Cumulate();
-        else
-            y.Distribute();
+        //if(x.GetParallelStatus()==CUMULATED){
+        x.Distribute();
+        //}
+        //if(y.GetParallelStatus()==CUMULATED){
+        y.Distribute();
+        //}
+        
         auto block_nr=0;
-        for (auto block: blocks_inverted) {
-            block.MultAdd (s, *xpar.GetLocalVector(), *ypar.GetLocalVector());
+        auto i_old=0;
+        auto y_local=ypar.GetLocalVector()->FVDouble();
+        auto x_local=xpar.GetLocalVector()->FVDouble();
+        for (auto block: blocks) {
+            FlatVector<> rhs(py::len(block), lh);
+            FlatVector<> res(py::len(block), lh);
+            i_old=0;
+            for (auto i: block){
+                rhs[i_old++]=x_local[i.cast<int>()];
+            }
+
+            auto m=blocks_inverted[block_nr++];
+            cout << "typid"<<typeid(m).name()<<endl;
+            res=m*rhs;
+            
+            cout <<"after mult"<<m << "sdf"<<endl;
+            i_old=0;
+            cout << y_local.Size()<<endl;
+            for (auto i: block){
+                y_local[i.cast<int>()]=res[i_old++];
+            }
         }
         
     }
@@ -113,7 +144,6 @@ public:
             }
         }
         comm.Barrier();
-        cout << "start"<<endl;
         
         for (auto block : blocks) {
             auto dp = mat->GetParallelDofs()->GetDistantProcs(pylist_get(block, 0));
@@ -148,29 +178,21 @@ public:
             requests.Append(r_recv);
         }
         MyMPI_WaitAll(requests);
-        comm.Barrier();
         
-        
+        blocks_inverted.Assign(py::len(blocks), lh);
         shared_blocks_offset = 0;
-        
+        auto block_nr=0;
         for (auto block: blocks) {
-            //cout << "len"<<py::len(block)<<py::len(block)<<endl;
             FlatMatrix tmp(py::len(block), py::len(block), lh);
-            
-            //cout << "l23ljfljslfj"<<endl;
+        
             auto dp = mat->GetParallelDofs()->GetDistantProcs(pylist_get(block, 0));
-            //cout << "after get dist procs"<<endl;
             proc = -1;
             auto n = 0;
             if (dp.Size() == 1) {
-                //cout << "ljslfj"<<dp<<endl;
                 proc = dp[0];
                 n = py::len(block);
-                //cout <<"n"<< n <<endl;
-            }else{
-                continue;
             }
-            //cout << "zhasefaz"<<endl;
+        
             i_new=0;
             for (auto i: block) {
                 j_new=0;
@@ -179,7 +201,6 @@ public:
                     
                     if (proc != -1) {
                         auto index=shared_blocks_offset[proc] + i_new * n + j_new;
-                        cout << "in dex"<<index<<endl;
                         tmp(i_new, j_new) += shared_blocks_get[proc][index];
                     }
                     j_new++;
@@ -192,7 +213,9 @@ public:
             
             
             CalcInverse(tmp);
+            blocks_inverted[block_nr].Assign(tmp);
         }
+        comm.Barrier();
     }
     
     
@@ -201,7 +224,7 @@ public:
 
 PYBIND11_MODULE(blockjacobi_parallel, m) {
     
-    py::class_<BlockJacobiParallel>(m, "BlockJacobiParallel")
+    py::class_<BlockJacobiParallel, shared_ptr<BlockJacobiParallel>, BaseMatrix>(m, "BlockJacobiParallel")
     .def(py::init<shared_ptr<SparseMatrix<double>>, py::list>());
     //.def("Apply", &BlockJacobiParallel<2>::Apply);
 }
