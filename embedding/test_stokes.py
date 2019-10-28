@@ -123,12 +123,12 @@ def spaces_test(precon="bddc"):
         # > 0 and x_free[d]] for (e, dofnrs) in zip(mesh.Elements(), [V.GetDofNrs(e) for e in mesh.Elements()])]
         # blocks = [[d for d in dofnrs if x_free[d]] for dofnrs in (V.GetDofNrs(e) for e in mesh.facets) if len(dofnrs) > 0]
 
-        blocks = [[d for d in dofnrs if x_free[d]] for dofnrs in (V.GetDofNrs(e) for e in mesh.facets) if len(dofnrs) > 0] \
-                 + [list(d for d in ar if d >= 0 and x_free[d]) for ar in (V.GetDofNrs(NodeId(FACE, k)) for k in range(mesh.nface))]
+        blocks = [[d for d in dofnrs if x_free[d]] for dofnrs in (V.GetDofNrs(e) for e in mesh.facets) if len(dofnrs) > 0]# \
+                # + [list(d for d in ar if d >= 0 and x_free[d]) for ar in (V.GetDofNrs(NodeId(FACE, k)) for k in range(mesh.nface))]
 
         # blocks = [list(d for d in ar if d >= 0 and x_free[d]) for ar in (V.GetDofNrs(e) for e in mesh.Elements())]
 
-        BlockJacobiParallel(a.mat, [[1, 2, 3]])
+        BlockJacobiParallel(a.mat.local_mat, blocks)
         pre_blockjacobi = a.mat.CreateBlockSmoother(blocks) if mpi_world.size == 1 else a.mat.local_mat.CreateBlockSmoother(blocks, parallel=True)
         preA = pre_blockjacobi + Ahat_inv
     else:
