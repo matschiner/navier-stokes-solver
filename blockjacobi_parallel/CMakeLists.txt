@@ -6,7 +6,7 @@ find_package(NGSolve CONFIG REQUIRED
   HINTS $ENV{NETGENDIR}/..  /Users/max/Dev/ngsolve-install/Contents/Resources/CMake
 )
 
-add_ngsolve_python_module(blockjacobi_parallel main.cpp      )
+add_ngsolve_python_module(blockjacobi_parallel main.cpp mainfast.cpp     )
 
 # check if CMAKE_INSTALL_PREFIX is set by user, otherwise install to user-local python modules directory
 if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)

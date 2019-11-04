@@ -4,6 +4,5 @@ ng.ini
 __pycache__/
 errors.csv
 data/
-*.cpp
 *.so
 *.o

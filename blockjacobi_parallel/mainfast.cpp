@@ -13,30 +13,18 @@
 
 #include <solve.hpp>
 #include <python_ngstd.hpp>
-#include "mainfast.cpp"
+
 
 using namespace ngsolve;
 using ngfem::ELEMENT_TYPE;
-int pylist_get(py::handle list, int index){
-    auto dof_first=0;
-    auto i=0;
-    for (auto dof: list){
-        
-        if (i>=index){
-            dof_first=dof.cast<int>();
-            break;
-        }
-        i++;
-    }
-    return dof_first;
-}
 
-class BlockJacobiParallelSlow : public BaseMatrix {
+
+class BlockJacobiParallel : public BaseMatrix {
 public:
     
     const shared_ptr<SparseMatrix<double>> mat;
     const shared_ptr<ParallelDofs> pdofs;
-    const py::list blocks;
+    Table<int> blocks;
     Array<FlatMatrix<>> blocks_inverted;
     AutoVector CreateRowVector() const override {
         return make_shared<S_ParallelBaseVectorPtr<Complex>>        (mat->Width(), pdofs->GetEntrySize(), pdofs, DISTRIBUTED);
@@ -44,7 +32,7 @@ public:
     AutoVector CreateColVector() const override {
         return make_shared<S_ParallelBaseVectorPtr<Complex>>        (mat->Width(), pdofs->GetEntrySize(), pdofs, DISTRIBUTED);
     }
-    ~BlockJacobiParallelSlow(){
+    ~BlockJacobiParallel(){
         
     }
     
@@ -75,14 +63,14 @@ public:
         auto y_local=ypar.GetLocalVector()->FVDouble();
         auto x_local=xpar.GetLocalVector()->FVDouble();
         for (auto block: blocks) {
-            if (py::len(block)){
+            if (block.Size()){
                 continue;
             }
-            FlatVector<> rhs(py::len(block), lh);
-            FlatVector<> res(py::len(block), lh);
+            FlatVector<> rhs(block.Size(), lh);
+            FlatVector<> res(block.Size(), lh);
             i_old=0;
             for (auto i: block){
-                rhs[i_old++]=x_local[i.cast<int>()];
+                rhs[i_old++]=x_local[i];
             }
 
             auto m=blocks_inverted[block_nr++];
@@ -90,13 +78,13 @@ public:
             res=m*rhs;
             i_old=0;
             for (auto i: block){
-                y_local[i.cast<int>()]=res[i_old++];
+                y_local[i]=res[i_old++];
             }
         }
     }
     
-    BlockJacobiParallelSlow(shared_ptr<SparseMatrix<double>> mat_in, py::list blocks)
-    : mat(mat_in), blocks(blocks)
+    BlockJacobiParallel(shared_ptr<SparseMatrix<double>> mat_in, py::list pyblocks)
+    : mat(mat_in)
     {
         
         LocalHeap lh(1000000);
@@ -121,16 +109,37 @@ public:
         Vector<int> shared_blocks_offset(ranksize);
         shared_blocks_offset = 0;
         
+        auto block_count=py::len(pyblocks);
+        auto block_size_max=0;
+        for (auto block: pyblocks){
+            if (py::len(block)>block_size_max){
+                block_size_max=py::len(block);
+            }
+        }
+        Table<int> blocks=Table<int>(block_count, block_size_max);
+        for (auto block: pyblocks){
+            j_new=0;
+            for (auto dof: block){
+                blocks[i_new][j_new++]=dof.cast<int>();
+            }
+            while(j_new<block_size_max){
+                blocks[i_new][j_new++]=-1;
+            }
+            i_new++;
+        }
         Array<FlatArray<double>> shared_blocks(ranksize);
         Array<FlatArray<double>> shared_blocks_get(ranksize);
-        
+    
         for (auto block : blocks) {
-            auto dp = mat->GetParallelDofs()->GetDistantProcs(pylist_get(block, 0));
+            if(block[0]<0){
+                continue;
+            }
+            auto dp = mat->GetParallelDofs()->GetDistantProcs(block[0]);
             if (dp.Size() == 1) {
                 //cout << dp << endl;
                 proc = dp[0];
                 shared_blocks_counts[proc]++;
-                shared_blocks_length_overall[proc] += py::len(block) * py::len(block);
+                shared_blocks_length_overall[proc] += block_size_max*block_size_max;
             }
         }
         
@@ -142,31 +151,28 @@ public:
                 }
             }
         }
-        
-        
+       
+   
         for (auto block : blocks) {
-            auto dp = mat->GetParallelDofs()->GetDistantProcs(pylist_get(block, 0));
+            if(block[0]<0){
+                continue;
+            }
+            auto dp = mat->GetParallelDofs()->GetDistantProcs(block[0]);
             if (dp.Size() == 1) {
                 proc = dp[0];
                 
-                auto n = py::len(block);
-                //cout << "proc"<<proc<<"n"<<n<<"ljdlj"<<shared_blocks_offset[proc]<<endl;
                 i_new=0;
                 for (auto i: block) {
-                    auto i_local = i.cast<int>();
                     j_new=0;
                     for (auto j: block) {
-                        auto j_local = j.cast<int>();
-                        //cout << "i,j"<<i_new<<" "<<j_new<<" sdf "<<shared_blocks_offset[proc] + i_new * n + j_new<<" / "<<shared_blocks_length_overall[proc]<<endl;
-                        shared_blocks[proc][shared_blocks_offset[proc] + i_new * n + j_new] = mat_local(i_local, j_local);
+                        shared_blocks[proc][shared_blocks_offset[proc] + i_new * block.Size() + j_new] = mat_local(i, j);
                         j_new++;
                     }
                     i_new++;
                 }
-                shared_blocks_offset[proc] += n * n;
+                shared_blocks_offset[proc] += block.Size()*block.Size();
             }
         }
-        //cout <<"sljdflj"<< shared_blocks<<endl;
         Array<MPI_Request> requests;
         for (auto i : Range(ranksize)) {
             if (i == rankid || shared_blocks_counts[i]==0) {
@@ -178,28 +184,30 @@ public:
         }
         MyMPI_WaitAll(requests);
         
-        blocks_inverted.Assign(py::len(blocks), lh);
+        blocks_inverted.Assign(blocks.Size(), lh);
         shared_blocks_offset = 0;
         auto block_nr=0;
         for (auto block: blocks) {
-            FlatMatrix tmp(py::len(block), py::len(block), lh);
-        
-            auto dp = mat->GetParallelDofs()->GetDistantProcs(pylist_get(block, 0));
+            if(block[0]<0){
+                continue;
+            }
+            FlatMatrix tmp(block.Size(), block.Size(), lh);
+            
+            auto dp = mat->GetParallelDofs()->GetDistantProcs(block[0]);
             proc = -1;
             auto n = 0;
             if (dp.Size() == 1) {
                 proc = dp[0];
-                n = py::len(block);
             }
         
             i_new=0;
             for (auto i: block) {
                 j_new=0;
                 for (auto j: block) {
-                    tmp(i_new, j_new) = mat_local(i.cast<int>(), j.cast<int>());
+                    tmp(i_new, j_new) = mat_local(i, j);
                     
                     if (proc != -1) {
-                        auto index=shared_blocks_offset[proc] + i_new * n + j_new;
+                        auto index=shared_blocks_offset[proc] + i_new * block.Size() + j_new;
                         tmp(i_new, j_new) += shared_blocks_get[proc][index];
                     }
                     j_new++;
@@ -214,23 +222,12 @@ public:
             CalcInverse(tmp);
             blocks_inverted[block_nr].Assign(tmp);
         }
+        
     }
     
-    
+  
 };
 
-
-PYBIND11_MODULE(blockjacobi_parallel, m) {
-    
-    py::class_<BlockJacobiParallelSlow, shared_ptr<BlockJacobiParallelSlow>, BaseMatrix>(m, "BlockJacobiParallelSlow")
-    .def(py::init<shared_ptr<SparseMatrix<double>>, py::list>());
-    //.def("Apply", &BlockJacobiParallel<2>::Apply);
-   
-    py::class_<BlockJacobiParallel, shared_ptr<BlockJacobiParallel>, BaseMatrix>(m, "BlockJacobiParallel")
-    .def(py::init<shared_ptr<SparseMatrix<double>>, py::list>());
-    //.def("Apply", &BlockJacobiParallel<2>::Apply);
-    
-}
 
 
 
