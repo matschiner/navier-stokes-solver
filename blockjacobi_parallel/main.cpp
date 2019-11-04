@@ -8,7 +8,7 @@
  by an explicit time-stepping method
  
  */
-
+// not fully working
 
 
 #include <solve.hpp>
@@ -59,6 +59,8 @@ public:
     }
     void MultAdd (double s, const BaseVector & x, BaseVector & y) const override
     {
+        static Timer timer("blockjacobi_multadd_slow");
+        RegionTimer rt(timer);
         LocalHeap lh(1000000);
         const auto & xpar = dynamic_cast_ParallelBaseVector(x);
         auto & ypar = dynamic_cast_ParallelBaseVector(y);
@@ -90,7 +92,7 @@ public:
             res=m*rhs;
             i_old=0;
             for (auto i: block){
-                y_local[i.cast<int>()]=res[i_old++];
+                y_local[i.cast<int>()]+=s*res[i_old++];
             }
         }
     }
@@ -98,7 +100,8 @@ public:
     BlockJacobiParallelSlow(shared_ptr<SparseMatrix<double>> mat_in, py::list blocks)
     : mat(mat_in), blocks(blocks)
     {
-        
+        static Timer timer("blockjacobi_initial_slow");
+        RegionTimer rt(timer);
         LocalHeap lh(1000000);
         //FlatMatr
         // matrix initialize
@@ -125,6 +128,9 @@ public:
         Array<FlatArray<double>> shared_blocks_get(ranksize);
         
         for (auto block : blocks) {
+            if(py::len(block)){
+                continue;
+            }
             auto dp = mat->GetParallelDofs()->GetDistantProcs(pylist_get(block, 0));
             if (dp.Size() == 1) {
                 //cout << dp << endl;
@@ -145,6 +151,9 @@ public:
         
         
         for (auto block : blocks) {
+         if(py::len(block)==0){
+             continue;
+            }
             auto dp = mat->GetParallelDofs()->GetDistantProcs(pylist_get(block, 0));
             if (dp.Size() == 1) {
                 proc = dp[0];
@@ -182,8 +191,10 @@ public:
         shared_blocks_offset = 0;
         auto block_nr=0;
         for (auto block: blocks) {
+            if(py::len(block)==0){
+                continue;
+            }
             FlatMatrix tmp(py::len(block), py::len(block), lh);
-        
             auto dp = mat->GetParallelDofs()->GetDistantProcs(pylist_get(block, 0));
             proc = -1;
             auto n = 0;
@@ -206,13 +217,13 @@ public:
                 }
                 i_new++;
             }
-            if (dp.Size() == 1) {
+            if (proc!=-1) {
                 shared_blocks_offset[proc] += n * n;
             }
             
             
             CalcInverse(tmp);
-            blocks_inverted[block_nr].Assign(tmp);
+            blocks_inverted[block_nr++].Assign(tmp);
         }
     }
     

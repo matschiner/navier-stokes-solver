@@ -1,3 +1,5 @@
+import sys
+
 from ngsolve import *
 from ngsolve.la import EigenValues_Preconditioner
 from solvers.krylovspace import *
@@ -130,8 +132,9 @@ def spaces_test(precon="bddc"):
 
         precon = BlockJacobiParallel(a.mat.local_mat, blocks)
 
-        pre_blockjacobi = a.mat.CreateBlockSmoother(blocks) if mpi_world.size == 1 else a.mat.local_mat.CreateBlockSmoother(blocks, parallel=True)
+        #pre_blockjacobi = a.mat.CreateBlockSmoother(blocks) if mpi_world.size == 1 else a.mat.local_mat.CreateBlockSmoother(blocks, parallel=True)
         preA = precon + Ahat_inv
+        #preA = pre_blockjacobi + Ahat_inv
     else:
         preA = Preconditioner(a, 'bddc')
         a.Assemble()
@@ -184,6 +187,15 @@ def spaces_test(precon="bddc"):
         results["time_minres"] = minResTimer.time
 
     print("MinRes took", round(minResTimer.time, 4), "seconds")
+    #timers = {x["name"]: x["time"] for x in }
+    timers=Timers()
+    sys.stdout.flush()
+    #for x, v in timers.items():
+    #    print(x,"\t", v)
+    if mpi_world.rank==1:
+        for t in timers:
+            if t["name"][:11] == "blockjacobi":
+                print(t)
 
     # gfu.vec.data = sol[0]
     # gfp.vec.data = sol[1]

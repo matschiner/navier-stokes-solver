@@ -48,6 +48,8 @@ public:
     void MultAdd (double s, const BaseVector & x, BaseVector & y) const override
     {
         LocalHeap lh(1000000);
+        static Timer timer("blockjacobi_multadd");
+        RegionTimer rt(timer);
         const auto & xpar = dynamic_cast_ParallelBaseVector(x);
         auto & ypar = dynamic_cast_ParallelBaseVector(y);
         
@@ -59,26 +61,29 @@ public:
         //}
         
         auto block_nr=0;
-        auto i_old=0;
+
         auto y_local=ypar.GetLocalVector()->FVDouble();
         auto x_local=xpar.GetLocalVector()->FVDouble();
+        
         for (auto block: blocks) {
-            if (block.Size()){
+            if (block[0]==-1){
                 continue;
             }
-            FlatVector<> rhs(block.Size(), lh);
-            FlatVector<> res(block.Size(), lh);
-            i_old=0;
-            for (auto i: block){
-                rhs[i_old++]=x_local[i];
+            size_t block_size_real=0;
+            while(block[block_size_real]!=-1 && block_size_real<block.Size()){
+                block_size_real++;
+            }
+            FlatVector<> rhs(block_size_real, lh);
+            FlatVector<> res(block_size_real, lh);
+            for (auto i: Range(block_size_real)){
+                rhs[i]= x_local[block[i]];
             }
 
-            auto m=blocks_inverted[block_nr++];
 
-            res=m*rhs;
-            i_old=0;
-            for (auto i: block){
-                y_local[i]=res[i_old++];
+            res=blocks_inverted[block_nr++]*rhs;
+
+            for (auto i: Range(block_size_real)){
+                 y_local[block[i]] += s * res[i];
             }
         }
     }
@@ -87,7 +92,9 @@ public:
     : mat(mat_in)
     {
         
-        LocalHeap lh(1000000);
+        LocalHeap lh(100000000);
+        static Timer timer("blockjacobi_initial");
+        RegionTimer rt(timer);
         //FlatMatr
         // matrix initialize
         
@@ -98,7 +105,7 @@ public:
         int rankid = comm.Rank();
         
         auto proc = 0;
-        auto i_new=0, j_new=0;
+
         
         Vector<int> shared_blocks_counts(ranksize);
         shared_blocks_counts = 0;
@@ -109,6 +116,7 @@ public:
         Vector<int> shared_blocks_offset(ranksize);
         shared_blocks_offset = 0;
         
+        // converting to Table
         auto block_count=py::len(pyblocks);
         auto block_size_max=0;
         for (auto block: pyblocks){
@@ -116,7 +124,8 @@ public:
                 block_size_max=py::len(block);
             }
         }
-        Table<int> blocks=Table<int>(block_count, block_size_max);
+        auto i_new=0, j_new=0;
+        blocks=Table<int>(block_count, block_size_max);
         for (auto block: pyblocks){
             j_new=0;
             for (auto dof: block){
@@ -127,11 +136,13 @@ public:
             }
             i_new++;
         }
+        
+        //allocating exchange vectors
         Array<FlatArray<double>> shared_blocks(ranksize);
         Array<FlatArray<double>> shared_blocks_get(ranksize);
     
         for (auto block : blocks) {
-            if(block[0]<0){
+            if(block[0]==-1){
                 continue;
             }
             auto dp = mat->GetParallelDofs()->GetDistantProcs(block[0]);
@@ -152,27 +163,25 @@ public:
             }
         }
        
-   
+        // writing information into exchange vectors
         for (auto block : blocks) {
-            if(block[0]<0){
+            if(block[0]==-1){
                 continue;
             }
             auto dp = mat->GetParallelDofs()->GetDistantProcs(block[0]);
             if (dp.Size() == 1) {
                 proc = dp[0];
-                
-                i_new=0;
-                for (auto i: block) {
-                    j_new=0;
-                    for (auto j: block) {
-                        shared_blocks[proc][shared_blocks_offset[proc] + i_new * block.Size() + j_new] = mat_local(i, j);
-                        j_new++;
+
+                for (auto i: Range(block_size_max)) {
+                    for (auto j: Range(block_size_max)) {
+                        shared_blocks[proc][shared_blocks_offset[proc] + i * block_size_max + j] = mat_local(block[i], block[j]);
                     }
-                    i_new++;
                 }
-                shared_blocks_offset[proc] += block.Size()*block.Size();
+                shared_blocks_offset[proc] += block_size_max*block_size_max;
             }
         }
+        
+        // exchanging information
         Array<MPI_Request> requests;
         for (auto i : Range(ranksize)) {
             if (i == rankid || shared_blocks_counts[i]==0) {
@@ -188,44 +197,41 @@ public:
         shared_blocks_offset = 0;
         auto block_nr=0;
         for (auto block: blocks) {
-            if(block[0]<0){
+            if(block[0]==-1){
                 continue;
             }
-            FlatMatrix tmp(block.Size(), block.Size(), lh);
+            size_t block_size_real=0;
+            while(block[block_size_real]!=-1 && block_size_real<block_size_max){
+                block_size_real++;
+            }
+            FlatMatrix tmp(block_size_real, block_size_real, lh);
             
             auto dp = mat->GetParallelDofs()->GetDistantProcs(block[0]);
             proc = -1;
-            auto n = 0;
+
             if (dp.Size() == 1) {
                 proc = dp[0];
             }
-        
-            i_new=0;
-            for (auto i: block) {
-                j_new=0;
-                for (auto j: block) {
-                    tmp(i_new, j_new) = mat_local(i, j);
-                    
+
+            for (auto i: Range(block_size_real)) {
+                for (auto j: Range(block_size_real)) {
+                    tmp(i, j) = mat_local(block[i], block[j]);
                     if (proc != -1) {
-                        auto index=shared_blocks_offset[proc] + i_new * block.Size() + j_new;
-                        tmp(i_new, j_new) += shared_blocks_get[proc][index];
+                        auto index=shared_blocks_offset[proc] + i * block_size_max + j;
+                        tmp(i, j) += shared_blocks_get[proc][index];
                     }
-                    j_new++;
                 }
-                i_new++;
             }
             if (dp.Size() == 1) {
-                shared_blocks_offset[proc] += n * n;
+                shared_blocks_offset[proc] += block_size_max*block_size_max;
             }
-            
-            
+    
             CalcInverse(tmp);
-            blocks_inverted[block_nr].Assign(tmp);
+            blocks_inverted[block_nr++].Assign(tmp);
         }
         
     }
-    
-  
+
 };
 
 
