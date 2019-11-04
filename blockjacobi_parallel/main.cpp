@@ -75,6 +75,9 @@ public:
         auto y_local=ypar.GetLocalVector()->FVDouble();
         auto x_local=xpar.GetLocalVector()->FVDouble();
         for (auto block: blocks) {
+            if (py::len(block)){
+                continue;
+            }
             FlatVector<> rhs(py::len(block), lh);
             FlatVector<> res(py::len(block), lh);
             i_old=0;
@@ -83,17 +86,13 @@ public:
             }
 
             auto m=blocks_inverted[block_nr++];
-            cout << "typid"<<typeid(m).name()<<endl;
+
             res=m*rhs;
-            
-            cout <<"after mult"<<m << "sdf"<<endl;
             i_old=0;
-            cout << y_local.Size()<<endl;
             for (auto i: block){
                 y_local[i.cast<int>()]=res[i_old++];
             }
         }
-        
     }
     
     BlockJacobiParallel(shared_ptr<SparseMatrix<double>> mat_in, py::list blocks)
