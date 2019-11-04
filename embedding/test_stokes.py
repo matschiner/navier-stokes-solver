@@ -6,7 +6,7 @@ from solvers.krylovspace import *
 from solvers.krylovspace import MinRes
 from solvers.bramblepasciak import BramblePasciakCG as BPCG
 from multiplicative_precond.preconditioners import MultiplicativePrecond
-# import netgen.gui
+import netgen.gui
 from embedding.helpers import CreateEmbeddingPreconditioner
 from blockjacobi_parallel import *
 
@@ -26,10 +26,10 @@ np = comm.size
 
 from netgen.geom2d import SplineGeometry
 
-# geom = SplineGeometry()
-# geom.AddRectangle((0, 0), (2, 0.41), bcs=("wall", "outlet", "wall", "inlet"))
-# geom.AddCircle((0.2, 0.2), r=0.05, leftdomain=0, rightdomain=1, bc="cyl")
-# diri = "wall|inlet|cyl"
+geom = SplineGeometry()
+geom.AddRectangle((0, 0), (2, 0.41), bcs=("wall", "outlet", "wall", "inlet"))
+geom.AddCircle((0.2, 0.2), r=0.05, leftdomain=0, rightdomain=1, bc="cyl")
+diri = "wall|inlet|cyl"
 
 geom = netgen.geom2d.unit_square
 diri = "left"
@@ -130,11 +130,13 @@ def spaces_test(precon="bddc"):
 
         # blocks = [list(d for d in ar if d >= 0 and x_free[d]) for ar in (V.GetDofNrs(e) for e in mesh.Elements())]
 
-        precon = BlockJacobiParallel(a.mat.local_mat, blocks)
+        if mpi_world.size > 1:
+            precon = BlockJacobiParallel(a.mat.local_mat, blocks)
+            preA = precon + Ahat_inv
 
-        #pre_blockjacobi = a.mat.CreateBlockSmoother(blocks) if mpi_world.size == 1 else a.mat.local_mat.CreateBlockSmoother(blocks, parallel=True)
-        preA = precon + Ahat_inv
-        #preA = pre_blockjacobi + Ahat_inv
+        else:
+            pre_blockjacobi = a.mat.CreateBlockSmoother(blocks) if mpi_world.size == 1 else a.mat.local_mat.CreateBlockSmoother(blocks, parallel=True)
+            preA = pre_blockjacobi + Ahat_inv
     else:
         preA = Preconditioner(a, 'bddc')
         a.Assemble()
@@ -172,9 +174,9 @@ def spaces_test(precon="bddc"):
     rhs = BlockVector([f.vec, g.vec])
     sol = BlockVector([gfu.vec, gfp.vec])
 
-    tmp1 = a.mat.CreateColVector()
-    tmp1[:] = 1
-    CG(mat=a.mat, pre=preA, rhs=tmp1, sol=gfu.vec, printrates=True)
+    #tmp1 = a.mat.CreateColVector()
+    #tmp1[:] = 1
+    #CG(mat=a.mat, pre=preA, rhs=tmp1, sol=gfu.vec, printrates=True)
 
     with TaskManager():  # pajetrace=100*1000*1000):
         minResTimer.Start()
@@ -187,27 +189,18 @@ def spaces_test(precon="bddc"):
         results["time_minres"] = minResTimer.time
 
     print("MinRes took", round(minResTimer.time, 4), "seconds")
-    #timers = {x["name"]: x["time"] for x in }
-    timers=Timers()
-    sys.stdout.flush()
-    #for x, v in timers.items():
-    #    print(x,"\t", v)
-    if mpi_world.rank==1:
-        for t in timers:
-            if t["name"][:11] == "blockjacobi":
-                print(t)
 
     # gfu.vec.data = sol[0]
     # gfp.vec.data = sol[1]
     Draw(gfu.components[0], mesh, "v")
     Draw(gfp, mesh, "p")
-
+    input("test")
     # Draw(gfu.components[1], mesh, "v_hat")
 
     return results, V.ndof + Q.ndof
 
 
-spaces_test("embedded")
+spaces_test("bddc")
 # spaces_test(V, Q, precon="multi")
 
 # import pandas as pd

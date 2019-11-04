@@ -14,7 +14,7 @@ mesh = Mesh(unit_square.GenerateMesh(maxh=0.1))
 
 nu = 1
 order = 5
-condense = False
+condense = True
 alpha = 10
 force = CoefficientFunction((x, x))
 
@@ -45,10 +45,12 @@ Mw += u * v_dual * dS
 Mw += uhat * tang(vhat) * dS
 Mw.Assemble()
 
-Mw_inverse = Mw.mat.Inverse(inverse="umfpack")
+Mw_inverse = Mw.mat.Inverse(inverse="umfpack", freedofs=X.FreeDofs(condense))
 
 Mw_trans = Mw.mat.CreateTranspose()
-Mw_trans_inverse = Mw_trans.Inverse(inverse="umfpack")
+Mw_trans_inverse = Mw_trans.Inverse(inverse="umfpack", freedofs=X.FreeDofs(condense))
+
+proj = Projector(X.FreeDofs(condense), True, )
 
 E = Mw_inverse @ M.mat
 ET = M.mat.T @ Mw_trans_inverse
@@ -85,11 +87,12 @@ a += SymbolicBFI(nu * alpha * (order + 1) ** 2 / h * InnerProduct(tang(vhat - v)
 a.Assemble()
 xfree = X.FreeDofs(condense)
 pre_block = a.mat.CreateBlockSmoother([
-    [d for d in dofnrs if xfree[d]] for (e, dofnrs) in zip(mesh.Elements(),[X.GetDofNrs(e) for e in mesh.Elements()]) if len(dofnrs) > 0
+    [d for d in dofnrs if xfree[d]] for (e, dofnrs) in zip(mesh.Elements(), [X.GetDofNrs(e) for e in mesh.Elements()]) if len(dofnrs) > 0
 ])
 pre_jacobi = a.mat.CreateSmoother(X.FreeDofs(condense))
 # preA = c.mat
 preA = Ahat_inv + pre_block
+preA = pre_block + Ahat_inv
 
 f = LinearForm(X)
 f += SymbolicLFI(force * v)
@@ -109,8 +112,9 @@ if iterative:
 else:
     gfu.vec.data = a.mat.Inverse(X.FreeDofs(True), inverse="sparsecholesky") * f.vec
 
-vel = CoefficientFunction((gfu.components[0]))
+vel = gfu.components[0]
 
 Draw(vel, mesh, "vel")
+Draw(div(vel), mesh, "div")
 visoptions.scalfunction = 'vel:0'
 input("end")

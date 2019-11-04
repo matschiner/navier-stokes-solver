@@ -150,7 +150,7 @@ public:
                 //cout << dp << endl;
                 proc = dp[0];
                 shared_blocks_counts[proc]++;
-                shared_blocks_length_overall[proc] += block_size_max*block_size_max;
+                shared_blocks_length_overall[proc] += block_size_max * block_size_max;
             }
         }
         
@@ -207,7 +207,7 @@ public:
             FlatMatrix tmp(block_size_real, block_size_real, lh);
             
             auto dp = mat->GetParallelDofs()->GetDistantProcs(block[0]);
-            proc = -1;
+            proc = dp.Size() ? -1 : dp[0];
 
             if (dp.Size() == 1) {
                 proc = dp[0];
