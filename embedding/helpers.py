@@ -7,13 +7,13 @@ class EmbeddingTransformation(BaseMatrix):
     def __init__(self, M, Mw, eblocks, fblocks):
         super(EmbeddingTransformation, self).__init__()
         par = mpi_world.size > 1
-        get_loc = lambda X : X.local_mat if par else X
+        get_loc = lambda X: X.local_mat if par else X
         self.M = get_loc(M.mat)
         self.Mw = get_loc(Mw.mat)
         self.smootherE = self.Mw.CreateBlockSmoother(eblocks)
         self.smootherF = self.Mw.CreateBlockSmoother(fblocks)
         self.Mw_trans = self.Mw.CreateTranspose()
-        self.Vrhs = self.M.CreateColVector() #embedding U -> V
+        self.Vrhs = self.M.CreateColVector()  # embedding U -> V
         self.Vup = self.M.CreateColVector()
         # self.smootherReversed = Mw_trans.CreateBlockSmoother(fblocks + eblocks)
 
@@ -60,8 +60,9 @@ class EmbeddingTransformation(BaseMatrix):
 
 def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*"):
     mesh = X.mesh
-    (u, u_hat, sigma), (v, v_hat, tau) = X.TnT()
-
+    uu, vv = X.TnT()
+    u, u_hat = uu[0], uu[1]
+    v, v_hat = vv[0], vv[1]
     n = specialcf.normal(mesh.dim)
 
     def tang(vec):
@@ -83,8 +84,6 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*"):
     Mw += u * v_dual * dS
     Mw += u_hat * tang(v_hat) * dS
     Mw.Assemble()
-
-
 
     # Mw_inverse = Mw.mat.Inverse(inverse="umfpack")
     # Mw_trans_inverse = Mw_trans.Inverse(inverse="umfpack")
@@ -124,5 +123,4 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*"):
     # Draw(gfx.components[0])
     # input("lj")
 
-    
     return emb @ laplaceH1_inverse @ emb.T

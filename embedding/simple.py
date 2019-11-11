@@ -92,7 +92,6 @@ pre_block = a.mat.CreateBlockSmoother([
 pre_jacobi = a.mat.CreateSmoother(X.FreeDofs(condense))
 # preA = c.mat
 preA = Ahat_inv + pre_block
-preA = pre_block + Ahat_inv
 
 f = LinearForm(X)
 f += SymbolicLFI(force * v)
