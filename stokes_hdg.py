@@ -31,7 +31,7 @@ class elements:
         self.order = order
         self.v1, self.v2, self.setup_lambda = (
             FESpace([HDiv(self.mesh, order=order),
-                     VectorFacet(self.mesh, order=order, dirichlet="wall|inlet|cyl"),
+                     TangentialFacetFESpace(self.mesh, order=order, dirichlet="wall|inlet|cyl"),
                      ]),
             L2(self.mesh, order=0),
             lambda v1, v2: 1,
@@ -146,7 +146,7 @@ def spaces_test(V, Q, order, precon="bddc",
 
     with TaskManager():#pajetrace=100 * 1000 * 1000):
         bramblePasciakTimer.Start()
-        results["nits_bpcg"] = BPCG(a.mat, b.mat, None, f.vec, g.vec, preA, preM, sol2, initialize=False, tol=1e-7,
+        results["nits_bpcg"] = BPCG(a, b, None, f.vec, g.vec, preA, preM, sol2, initialize=False, tol=1e-7,
                                     maxsteps=100000, rel_err=True)
         bramblePasciakTimer.Stop()
         results["time_bpcg"] = bramblePasciakTimer.time
@@ -168,10 +168,10 @@ def spaces_test(V, Q, order, precon="bddc",
 
 
 V, Q = elements(mesh).bdm(order=2).setup()
-#res = spaces_test(V, Q, 2, precon="bddc")
-#print({"method": "bdm2", "ndofs": V.ndof + Q.ndof, "precon": "bddc", "vert": mesh.nv, **res})
-# spaces_test(V, Q, precon="multi")
-#exit(0)
+res = spaces_test(V, Q, order=2, precon="bddc")
+print({"method": "bdm2", "ndofs": V.ndof + Q.ndof, "precon": "bddc", "vert": mesh.nv, **res})
+spaces_test(V, Q,order=2, precon="multi")
+exit(0)
 
 import pandas as pd
 

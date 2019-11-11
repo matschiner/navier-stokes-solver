@@ -5,7 +5,7 @@ mesh = Mesh(unit_square.GenerateMesh(maxh=0.2))
 
 fesh1 = VectorH1(mesh, order=2)
 feshdiv = HDiv(mesh, order=2)
-fesvec = VectorFacet(mesh, order=2)
+fesvec = TangentialFacetFESpace(mesh, order=2)
 fescomp = FESpace([feshdiv, fesvec])
 
 gfuh1 = GridFunction(fesh1)

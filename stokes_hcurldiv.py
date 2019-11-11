@@ -17,7 +17,7 @@ Draw(mesh)
 
 V1 = HDiv(mesh, order=order, dirichlet="wall|inlet|cyl")
 Sigma = HCurlDiv(mesh, order=order - 1, orderinner=order, discontinuous=True)
-VHat = VectorFacet(mesh, order=order - 1, dirichlet="wall|inlet|cyl")
+VHat = TangentialFacetFESpace(mesh, order=order - 1, dirichlet="wall|inlet|cyl")
 Q = L2(mesh, order=order - 1)
 Sigma.SetCouplingType(IntRange(0, Sigma.ndof), COUPLING_TYPE.HIDDEN_DOF)
 Sigma = Compress(Sigma)

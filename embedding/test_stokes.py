@@ -26,17 +26,20 @@ np = comm.size
 
 from netgen.geom2d import SplineGeometry
 
-geom = SplineGeometry()
-geom.AddRectangle((0, 0), (2, 0.41), bcs=("wall", "outlet", "wall", "inlet"))
-geom.AddCircle((0.2, 0.2), r=0.05, leftdomain=0, rightdomain=1, bc="cyl")
-diri = "wall|inlet|cyl"
 
-geom = netgen.geom2d.unit_square
-diri = "left"
+geom_name = "tunnel"
+if geom_name == "tunnel":
+    geom = SplineGeometry()
+    geom.AddRectangle((0, 0), (2, 0.41), bcs=("wall", "outlet", "wall", "inlet"))
+    geom.AddCircle((0.2, 0.2), r=0.05, leftdomain=0, rightdomain=1, bc="cyl")
+    diri = "wall|inlet|cyl"
+else:
+    geom = netgen.geom2d.unit_square
+    diri = "left"
 
 if rank == 0:
     # master proc generates and immediately distributes
-    ngmesh = geom.GenerateMesh(maxh=0.1)
+    ngmesh = geom.GenerateMesh(maxh=0.06)
 
     if comm.size > 1:
         ngmesh.Distribute(comm)
@@ -52,7 +55,7 @@ mesh.Curve(3)
 condense = True
 
 
-def spaces_test(precon="bddc"):
+def spaces_test(precon):
     results = {}
 
     V1 = HDiv(mesh, order=order, dirichlet=diri)
@@ -125,18 +128,16 @@ def spaces_test(precon="bddc"):
         # > 0 and x_free[d]] for (e, dofnrs) in zip(mesh.Elements(), [V.GetDofNrs(e) for e in mesh.Elements()])]
         # blocks = [[d for d in dofnrs if x_free[d]] for dofnrs in (V.GetDofNrs(e) for e in mesh.facets) if len(dofnrs) > 0]
 
-        blocks = [[d for d in dofnrs if x_free[d]] for dofnrs in (V.GetDofNrs(e) for e in mesh.facets) if len(dofnrs) > 0]  # \
-        # + [list(d for d in ar if d >= 0 and x_free[d]) for ar in (V.GetDofNrs(NodeId(FACE, k)) for k in range(mesh.nface))]
+
+        blocks = [[d for d in dofnrs if x_free[d]] for dofnrs in (V.GetDofNrs(e) for e in mesh.facets) if len(dofnrs) > 0] #\
+        #+ [list(d for d in ar if d >= 0 and x_free[d]) for ar in (V.GetDofNrs(NodeId(FACE, k)) for k in range(mesh.nface))]
 
         # blocks = [list(d for d in ar if d >= 0 and x_free[d]) for ar in (V.GetDofNrs(e) for e in mesh.Elements())]
-
-        if mpi_world.size > 1:
+        if comm.size > 1:
             precon = BlockJacobiParallel(a.mat.local_mat, blocks)
-            preA = precon + Ahat_inv
-
         else:
-            pre_blockjacobi = a.mat.CreateBlockSmoother(blocks) if mpi_world.size == 1 else a.mat.local_mat.CreateBlockSmoother(blocks, parallel=True)
-            preA = pre_blockjacobi + Ahat_inv
+            precon = a.mat.CreateBlockSmoother(blocks) if mpi_world.size == 1 else a.mat.local_mat.CreateBlockSmoother(blocks, parallel=True)
+        preA = precon + Ahat_inv
     else:
         preA = Preconditioner(a, 'bddc')
         a.Assemble()
@@ -174,10 +175,6 @@ def spaces_test(precon="bddc"):
     rhs = BlockVector([f.vec, g.vec])
     sol = BlockVector([gfu.vec, gfp.vec])
 
-    #tmp1 = a.mat.CreateColVector()
-    #tmp1[:] = 1
-    #CG(mat=a.mat, pre=preA, rhs=tmp1, sol=gfu.vec, printrates=True)
-
     with TaskManager():  # pajetrace=100*1000*1000):
         minResTimer.Start()
         tmp, results["nits_minres"] = MinRes(mat=K, pre=C, rhs=rhs, sol=sol, initialize=False, tol=1e-9, maxsteps=1000)
@@ -188,19 +185,18 @@ def spaces_test(precon="bddc"):
         minResTimer.Stop()
         results["time_minres"] = minResTimer.time
 
-    print("MinRes took", round(minResTimer.time, 4), "seconds")
 
     # gfu.vec.data = sol[0]
     # gfp.vec.data = sol[1]
     Draw(gfu.components[0], mesh, "v")
     Draw(gfp, mesh, "p")
-    input("test")
+    input("finish")
     # Draw(gfu.components[1], mesh, "v_hat")
 
     return results, V.ndof + Q.ndof
 
 
-spaces_test("bddc")
+spaces_test("embedded")
 # spaces_test(V, Q, precon="multi")
 
 # import pandas as pd

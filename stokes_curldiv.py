@@ -20,7 +20,7 @@ geo = SplineGeometry()
 geo.AddRectangle((0, 0), (2, 0.41), bcs=("wall", "outlet", "wall", "inlet"))
 geo.AddCircle((0.2, 0.2), r=0.05, leftdomain=0, rightdomain=1, bc="cyl")
 
-mesh = Mesh(geo.GenerateMesh(maxh=0.05))
+mesh = Mesh(geo.GenerateMesh(maxh=0.06))
 
 mesh.Curve(3)
 
@@ -32,7 +32,7 @@ def spaces_test(precon="bddc"):
 
     V1 = HDiv(mesh, order=order, dirichlet="wall|inlet|cyl")
     Sigma = HCurlDiv(mesh, order=order - 1, orderinner=order, discontinuous=True)
-    VHat = VectorFacet(mesh, order=order - 1, dirichlet="wall|inlet|cyl")
+    VHat = TangentialFacetFESpace(mesh, order=order - 1, dirichlet="wall|inlet|cyl")
     Q = L2(mesh, order=order - 1)
     Sigma.SetCouplingType(IntRange(0, Sigma.ndof), COUPLING_TYPE.HIDDEN_DOF)
     Sigma = Compress(Sigma)
@@ -166,7 +166,7 @@ import pandas as pd
 data = pd.DataFrame()
 for j in range(1):
     print("#" * 100, j)
-    mesh.Refine()
+    #mesh.Refine()
 
     print(mesh.nv)
 
