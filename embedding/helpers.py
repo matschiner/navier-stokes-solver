@@ -38,6 +38,7 @@ class EmbeddingTransformation(BaseMatrix):
 
         tmp1.data = self.smootherF.T * x
         tmp2.data = x - self.Mw_trans * tmp1
+
         tmp1.data += self.smootherE.T * tmp2
 
         y.data += c * self.M.T * tmp1
@@ -63,6 +64,7 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*"):
     uu, vv = X.TnT()
     u, u_hat = uu[0], uu[1]
     v, v_hat = vv[0], vv[1]
+
     n = specialcf.normal(mesh.dim)
 
     def tang(vec):
@@ -79,7 +81,7 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*"):
     M += vH1trial * tang(v_hat) * dS
     M.Assemble()
 
-    Mw = BilinearForm(X, eliminate_hidden=False)
+    Mw = BilinearForm(X)
     Mw += u * v_dual * dx
     Mw += u * v_dual * dS
     Mw += u_hat * tang(v_hat) * dS
@@ -94,8 +96,9 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*"):
     laplaceH1 = BilinearForm(VH1, condense=condense)
     laplaceH1 += nu * InnerProduct(grad(vH1trial), grad(vH1test)) * dx
 
-    laplaceH1_inverse = Preconditioner(laplaceH1, "bddc")
+    laplaceH1_inverse = Preconditioner(laplaceH1, "direct")
     laplaceH1.Assemble()
+
     # laplaceH1_inverse = laplaceH1.mat.Inverse(freedofs=VH1.FreeDofs(condense), inverse="sparsecholesky")
 
     eblocks = []
@@ -109,6 +112,7 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*"):
 
     emb = EmbeddingTransformation(M, Mw, eblocks, fblocks)
 
+    laplaceH1_inverse_wrapped = WrapMatrix(laplaceH1_inverse)
     if mpi_world.size > 1:
         emb = ParallelMatrix(emb,
                              row_pardofs=M.mat.row_pardofs,
@@ -123,4 +127,28 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*"):
     # Draw(gfx.components[0])
     # input("lj")
 
-    return emb @ laplaceH1_inverse @ emb.T
+    proj = Projector(X.FreeDofs(True), True)
+
+    return proj @ emb @ laplaceH1_inverse @ emb.T @ proj
+    # return emb @ laplaceH1_inverse_wrapped @ emb.T
+
+
+"""   class WrapMatrix(BaseMatrix):
+       def __init__(self, toWrap):
+           super(WrapMatrix, self).__init__()
+           self.toWrap = toWrap
+           self.gfu = GridFunction(VH1, name="h1_sol")
+           Draw(self.gfu)
+
+       def Mult(self, x, y, ):
+           print(x)
+           self.gfu.vec.data = self.toWrap * x
+           Redraw()
+           input("continue")
+           y.data = self.gfu.vec.data
+
+       def CreateColVector(self):
+           return self.toWrap.CreateColVector()
+
+       def CreateRowVector(self):
+           return self.toWrap.CreateRowVector()"""

@@ -9,6 +9,7 @@ from multiplicative_precond.preconditioners import MultiplicativePrecond
 import netgen.gui
 from embedding.helpers import CreateEmbeddingPreconditioner
 from blockjacobi_parallel import *
+from ngsolve.meshes import MakeStructured2DMesh
 
 ngsglobals.msg_level = 0
 
@@ -23,28 +24,39 @@ np = comm.size
 
 from netgen.geom2d import SplineGeometry
 
-
-geom_name = "tunnel"
+geom_name = "tunnel2"
+inflow = None
 if geom_name == "tunnel":
     geom = SplineGeometry()
     geom.AddRectangle((0, 0), (2, 0.41), bcs=("wall", "outlet", "wall", "inlet"))
     geom.AddCircle((0.2, 0.2), r=0.05, leftdomain=0, rightdomain=1, bc="cyl")
+    ngmesh = geom.GenerateMesh(maxh=0.018)
     diri = "wall|inlet|cyl"
+    inflow = "inlet"
+elif geom_name == "stretched":
+    geom = None
+    diri = "left|top|bottom"
+    inflow = "left"
 else:
     geom = netgen.geom2d.unit_square
-    diri = "left"
+    diri = "left|top|bottom"
+    inflow = "left"
 
 if rank == 0:
-    ngmesh = geom.GenerateMesh(maxh=0.06)
-    if comm.size > 1:
-        ngmesh.Distribute(comm)
+    if geom:
+        ngmesh = geom.GenerateMesh(maxh=0.04)
+        if comm.size > 1:
+            ngmesh.Distribute(comm)
+        mesh = Mesh(ngmesh)
+    else:
+        mesh = MakeStructured2DMesh(nx=4 * 3, ny=10 * 3, secondorder=True, quads=False, mapping=lambda x, y: (5 * x, y))
 else:
     ngmesh = netgen.meshing.Mesh.Receive(comm)
     ngmesh.SetGeometry(geom)
-mesh = Mesh(ngmesh)
+    mesh = Mesh(ngmesh)
 
 mesh.Curve(3)
-condense = True
+condense = False
 
 V1 = HDiv(mesh, order=order, dirichlet=diri, hodivfree=True)
 Sigma = HCurlDiv(mesh, order=order - 1, orderinner=order, discontinuous=True)
@@ -60,55 +72,55 @@ p, q = Q.TnT()
 
 n = specialcf.normal(mesh.dim)
 
+
 def tang(vec):
     return vec - (vec * n) * n
 
+
 dS = dx(element_boundary=True)
 
+a_integrand = -1 / nu * InnerProduct(sigma, tau) * dx \
+              + div(sigma) * v * dx + div(tau) * u * dx \
+              + -(sigma * n) * n * (v * n) * dS \
+              + -(tau * n) * n * (u * n) * dS \
+              + -(tau * n) * tang(u_hat) * dS \
+              + -(sigma * n) * tang(v_hat) * dS \
+              + nu * div(u) * div(v) * dx
+
 a = BilinearForm(V, eliminate_hidden=True, condense=condense)
-a += -1 / nu * InnerProduct(sigma, tau) * dx
-a += div(sigma) * v * dx + div(tau) * u * dx
-a += -(sigma * n) * n * (v * n) * dS
-a += -(tau * n) * n * (u * n) * dS
-a += -(tau * n) * tang(u_hat) * dS
-a += -(sigma * n) * tang(v_hat) * dS
-a += nu * div(u) * div(v) * dx
+a += a_integrand
 
 b = BilinearForm(trialspace=V, testspace=Q)
 b += div(u) * q * dx
 
-minResTimer = Timer("MinRes")
+minResTimer = Timer("MyMinRes")
 preconTimer = Timer("Precon")
 
 preconTimer.Start()
-precon="bddc"
+precon = "embedded"
 if precon == "embedded":
     Ahat_inv = CreateEmbeddingPreconditioner(V, nu, diri=diri)
 
     a.Assemble()
     b.Assemble()
 
-    t1 = a.mat.CreateRowVector()
-    t2 = a.mat.CreateRowVector()
-    t2.data = Ahat_inv * t1
-
     x_free = V.FreeDofs(condense)
 
-    blocks = [[d for d in dofnrs if x_free[d]] for dofnrs in (V.GetDofNrs(e) for e in mesh.facets) if len(dofnrs) > 0] #\
-    #+ [list(d for d in ar if d >= 0 and x_free[d]) for ar in (V.GetDofNrs(NodeId(FACE, k)) for k in range(mesh.nface))]
+    blocks = [[d for d in dofnrs if x_free[d]] for dofnrs in (V.GetDofNrs(e) for e in mesh.facets) if len(dofnrs) > 0] \
+             + [list(d for d in ar if d >= 0 and x_free[d]) for ar in (V.GetDofNrs(NodeId(FACE, k)) for k in range(mesh.nface))]
 
     if comm.size > 1:
-        precon = BlockJacobiParallel(a.mat.local_mat, blocks)
+        precon_blockjac = BlockJacobiParallel(a.mat.local_mat, blocks)
     else:
-        precon = a.mat.CreateBlockSmoother(blocks) if mpi_world.size == 1 else a.mat.local_mat.CreateBlockSmoother(blocks, parallel=True)
-    preA = precon + Ahat_inv
+        precon_blockjac = a.mat.CreateBlockSmoother(blocks)
+    preA = precon_blockjac+ Ahat_inv
 else:
     preA = Preconditioner(a, 'bddc')
     a.Assemble()
     b.Assemble()
 
-evals = list(EigenValues_Preconditioner(a.mat, preA))
-print(evals[0], evals[-1], "cond", evals[-1] / evals[0])
+#evals = list(EigenValues_Preconditioner(a.mat, preA))
+#print(evals[0], evals[-1], "cond", evals[-1] / evals[0])
 
 preconTimer.Stop()
 
@@ -127,7 +139,7 @@ g.Assemble()
 gfu = GridFunction(V, name="u")
 gfp = GridFunction(Q, name="p")
 uin = CoefficientFunction((1.5 * 4 * y * (0.41 - y) / (0.41 * 0.41), 0))
-gfu.components[0].Set(uin, definedon=mesh.Boundaries("inlet"))
+gfu.components[0].Set(uin, definedon=mesh.Boundaries(inflow))
 
 # Draw(x - 0.5, mesh, "source")
 if a.condense:
@@ -147,6 +159,9 @@ with TaskManager():  # pajetrace=100*1000*1000):
 
     minResTimer.Stop()
 
+timers = dict((t["name"], t["time"]) for t in Timers())
+print("MinRes", timers["MyMinRes"])
+print("Precon", timers["Precon"])
 
 Draw(gfu.components[0], mesh, "v")
 Draw(gfp, mesh, "p")
