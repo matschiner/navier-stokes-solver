@@ -24,7 +24,7 @@ np = comm.size
 
 from netgen.geom2d import SplineGeometry
 
-geom_name = "tunnel2"
+geom_name = "stretched"
 inflow = None
 if geom_name == "tunnel":
     geom = SplineGeometry()
@@ -44,7 +44,7 @@ else:
 
 if rank == 0:
     if geom:
-        ngmesh = geom.GenerateMesh(maxh=0.04)
+        ngmesh = geom.GenerateMesh(maxh=0.018)
         if comm.size > 1:
             ngmesh.Distribute(comm)
         mesh = Mesh(ngmesh)
@@ -58,7 +58,7 @@ else:
 mesh.Curve(3)
 condense = False
 
-V1 = HDiv(mesh, order=order, dirichlet=diri, hodivfree=True)
+V1 = HDiv(mesh, order=1, dirichlet=diri, hodivfree=True)
 Sigma = HCurlDiv(mesh, order=order - 1, orderinner=order, discontinuous=True)
 VHat = TangentialFacetFESpace(mesh, order=order - 1, dirichlet=".*")
 Q = L2(mesh, order=1)
@@ -99,7 +99,7 @@ preconTimer = Timer("Precon")
 preconTimer.Start()
 precon = "embedded"
 if precon == "embedded":
-    Ahat_inv = CreateEmbeddingPreconditioner(V, nu, diri=diri)
+    Ahat_inv = CreateEmbeddingPreconditioner(V, nu, diri=diri, hodivfree=True)
 
     a.Assemble()
     b.Assemble()
@@ -152,7 +152,7 @@ sol = BlockVector([gfu.vec, gfp.vec])
 
 with TaskManager():  # pajetrace=100*1000*1000):
     minResTimer.Start()
-    MinRes(mat=K, pre=C, rhs=rhs, sol=sol, initialize=False, tol=1e-9, maxsteps=1000)
+    MinRes(mat=K, pre=C, rhs=rhs, sol=sol, initialize=False, tol=1e-9, maxsteps=10000)
     if a.condense:
         sol[0].data += a.harmonic_extension * sol[0]
         sol[0].data += a.inner_solve * f.vec

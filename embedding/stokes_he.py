@@ -24,7 +24,7 @@ np = comm.size
 
 from netgen.geom2d import SplineGeometry
 
-geom_name = "stretched2"
+geom_name = "stretched"
 inflow = None
 if geom_name == "tunnel":
     geom = SplineGeometry()
@@ -156,7 +156,7 @@ sol = BlockVector([gfu.vec, gfp.vec])
 
 with TaskManager():  # pajetrace=100*1000*1000):
     minResTimer.Start()
-    MinRes(mat=K, pre=C, rhs=rhs, sol=sol, initialize=False, tol=1e-9, maxsteps=1000)
+    MinRes(mat=K, pre=C, rhs=rhs, sol=sol, initialize=False, tol=1e-9, maxsteps=10000)
     minResTimer.Stop()
 
 timers = dict((t["name"], t["time"]) for t in Timers())

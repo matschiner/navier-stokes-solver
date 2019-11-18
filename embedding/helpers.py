@@ -59,11 +59,18 @@ class EmbeddingTransformation(BaseMatrix):
         return self.M.height
 
 
-def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*"):
+def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*", hodivfree=False):
     mesh = X.mesh
-    uu, vv = X.TnT()
-    u, u_hat = uu[0], uu[1]
-    v, v_hat = vv[0], vv[1]
+
+    (u, u_hat, _), (v, v_hat, _) = X.TnT()
+    xfree = X.FreeDofs()
+    if hodivfree:
+        V_hdiv_lo = HDiv(mesh, order=1, dirichlet=diri, hodivfree=True)
+        lodofs = BitArray(xfree)
+        lodofs[V_hdiv_lo.ndof:X.components[0].ndof] = False
+        projector_lo = Projector(lodofs, True)
+    else:
+        projector_lo = Projector(xfree, True)
 
     n = specialcf.normal(mesh.dim)
 
@@ -112,7 +119,7 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*"):
 
     emb = EmbeddingTransformation(M, Mw, eblocks, fblocks)
 
-    laplaceH1_inverse_wrapped = WrapMatrix(laplaceH1_inverse)
+    # laplaceH1_inverse_wrapped = WrapMatrix(laplaceH1_inverse)
     if mpi_world.size > 1:
         emb = ParallelMatrix(emb,
                              row_pardofs=M.mat.row_pardofs,
@@ -127,9 +134,9 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*"):
     # Draw(gfx.components[0])
     # input("lj")
 
-    proj = Projector(X.FreeDofs(True), True)
+    # proj = Projector(X.FreeDofs(True), True)
 
-    return proj @ emb @ laplaceH1_inverse @ emb.T @ proj
+    return projector_lo @ emb @ laplaceH1_inverse @ emb.T @ projector_lo
     # return emb @ laplaceH1_inverse_wrapped @ emb.T
 
 
