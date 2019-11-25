@@ -106,21 +106,21 @@ if precon == "embedded":
 
     x_free = V.FreeDofs(condense)
 
-    blocks = [[d for d in dofnrs if x_free[d]] for dofnrs in (V.GetDofNrs(e) for e in mesh.facets) if len(dofnrs) > 0] \
-             + [list(d for d in ar if d >= 0 and x_free[d]) for ar in (V.GetDofNrs(NodeId(FACE, k)) for k in range(mesh.nface))]
+    blocks = [[d for d in dofnrs if x_free[d]] for dofnrs in (V.GetDofNrs(e) for e in mesh.facets) if len(dofnrs) > 0] #\
+             #+ [list(d for d in ar if d >= 0 and x_free[d]) for ar in (V.GetDofNrs(NodeId(FACE, k)) for k in range(mesh.nface))]
 
     if comm.size > 1:
         precon_blockjac = BlockJacobiParallel(a.mat.local_mat, blocks)
     else:
         precon_blockjac = a.mat.CreateBlockSmoother(blocks)
-    preA = precon_blockjac+ Ahat_inv
+    preA = precon_blockjac + Ahat_inv
 else:
     preA = Preconditioner(a, 'bddc')
     a.Assemble()
     b.Assemble()
 
-#evals = list(EigenValues_Preconditioner(a.mat, preA))
-#print(evals[0], evals[-1], "cond", evals[-1] / evals[0])
+# evals = list(EigenValues_Preconditioner(a.mat, preA))
+# print(evals[0], evals[-1], "cond", evals[-1] / evals[0])
 
 preconTimer.Stop()
 
@@ -138,7 +138,7 @@ g.Assemble()
 
 gfu = GridFunction(V, name="u")
 gfp = GridFunction(Q, name="p")
-uin = CoefficientFunction((1.5 * 4 * y * (0.41 - y) / (0.41 * 0.41), 0))
+uin = CoefficientFunction((1.5 * 4 * y * (1 - y) / (0.41 * 0.41), 0))
 gfu.components[0].Set(uin, definedon=mesh.Boundaries(inflow))
 
 # Draw(x - 0.5, mesh, "source")

@@ -24,7 +24,7 @@ np = comm.size
 
 from netgen.geom2d import SplineGeometry
 
-geom_name = "stretched"
+geom_name = "tunnel"
 inflow = None
 if geom_name == "tunnel":
     geom = SplineGeometry()
@@ -109,8 +109,8 @@ if precon == "embedded":
 
     x_free = V.FreeDofs(condense)
 
-    blocks = [[d for d in dofnrs if x_free[d]] for dofnrs in (V.GetDofNrs(e) for e in mesh.facets) if len(dofnrs) > 0]  # \
-    # + [list(d for d in ar if d >= 0 and x_free[d]) for ar in (V.GetDofNrs(NodeId(FACE, k)) for k in range(mesh.nface))]
+    blocks = [[d for d in dofnrs if x_free[d]] for dofnrs in (V.GetDofNrs(e) for e in mesh.facets) if len(dofnrs) > 0]   \
+     + [list(d for d in ar if d >= 0 and x_free[d]) for ar in (V.GetDofNrs(NodeId(FACE, k)) for k in range(mesh.nface))]
 
     if comm.size > 1:
         precon_blockjac = BlockJacobiParallel(a.mat.local_mat, blocks)
@@ -146,7 +146,7 @@ g.Assemble()
 
 gfu = GridFunction(V, name="u")
 gfp = GridFunction(Q, name="p")
-uin = CoefficientFunction((1.5 * 4 * y * (0.41 - y) / (0.41 * 0.41), 0))
+uin = CoefficientFunction((1.5 * 4 * y * (1 - y) / (0.41 * 0.41), 0))
 gfu.components[0].Set(uin, definedon=mesh.Boundaries(inflow))
 
 K = BlockMatrix([[a_full.mat, b.mat.T], [b.mat, None]])

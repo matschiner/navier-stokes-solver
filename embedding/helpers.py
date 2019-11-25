@@ -1,4 +1,5 @@
 from ngsolve import *
+import ngs_amg
 
 dS = dx(element_boundary=True)
 
@@ -64,13 +65,8 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*", hodivfree=Fa
 
     (u, u_hat, _), (v, v_hat, _) = X.TnT()
     xfree = X.FreeDofs()
-    if hodivfree:
-        V_hdiv_lo = HDiv(mesh, order=1, dirichlet=diri, hodivfree=True)
-        lodofs = BitArray(xfree)
-        lodofs[V_hdiv_lo.ndof:X.components[0].ndof] = False
-        projector_lo = Projector(lodofs, True)
-    else:
-        projector_lo = Projector(xfree, True)
+
+    projector_lo = Projector(xfree, True)
 
     n = specialcf.normal(mesh.dim)
 
@@ -78,8 +74,10 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*", hodivfree=Fa
         return vec - (vec * n) * n
 
     v_dual = v.Operator("dual")
-
     VH1 = VectorH1(mesh, order=1, dirichlet=diri)
+
+    # VH1 = VectorH1(mesh, order=1, dirichlet=diri)
+
     vH1trial, vH1test = VH1.TnT()
 
     M = BilinearForm(trialspace=VH1, testspace=X)
@@ -100,13 +98,68 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*", hodivfree=Fa
     # E = Mw_inverse @ M.mat
     # ET = M.mat.T @ Mw_trans_inverse
 
-    laplaceH1 = BilinearForm(VH1, condense=condense)
-    laplaceH1 += nu * InnerProduct(grad(vH1trial), grad(vH1test)) * dx
-
-    laplaceH1_inverse = Preconditioner(laplaceH1, "direct")
-    laplaceH1.Assemble()
-
+    # laplaceH1 = BilinearForm(VH1, condense=condense)
+    # laplaceH1 += nu * InnerProduct(grad(vH1trial), grad(vH1test)) * dx
     # laplaceH1_inverse = laplaceH1.mat.Inverse(freedofs=VH1.FreeDofs(condense), inverse="sparsecholesky")
+
+    if mesh.dim == 2:
+        VH1_1 = H1(mesh, order=1, dirichlet=diri)
+        VH1_2 = H1(mesh, order=1, dirichlet=diri)
+        vH1trial_1, vH1test_1 = VH1_1.TnT()
+        vH1trial_2, vH1test_2 = VH1_2.TnT()
+
+        laplaceH1_1 = BilinearForm(VH1_1, condense=condense)
+        laplaceH1_1 += nu * InnerProduct(grad(vH1trial_1), grad(vH1test_1)) * dx
+
+        laplaceH1_2 = BilinearForm(VH1_2, condense=condense)
+        laplaceH1_2 += nu * InnerProduct(grad(vH1trial_2), grad(vH1test_2)) * dx
+
+        pc_opts = {"ngs_amg_max_coarse_size": 5,
+                   # "ngs_amg_log_level": "normal",
+                   "ngs_amg_do_test": True,
+                   "ngs_amg_print_log": True}
+        laplaceH1_inverse_1 = Preconditioner(laplaceH1_1, "ngs_amg.h1_scal", **pc_opts)
+        laplaceH1_inverse_2 = Preconditioner(laplaceH1_2, "ngs_amg.h1_scal", **pc_opts)
+        laplaceH1_1.Assemble()
+        laplaceH1_2.Assemble()
+
+        emb_comp1 = Embedding(VH1.ndof, VH1.Range(0))
+        emb_comp2 = Embedding(VH1.ndof, VH1.Range(1))
+        laplaceH1_inverse = emb_comp1 @ laplaceH1_inverse_1 @ emb_comp1.T + emb_comp2 @ laplaceH1_inverse_2 @ emb_comp2.T
+
+    else:
+        VH1_1 = H1(mesh, order=1, dirichlet=diri)
+        VH1_2 = H1(mesh, order=1, dirichlet=diri)
+        VH1_3 = H1(mesh, order=1, dirichlet=diri)
+        vH1trial_1, vH1test_1 = VH1_1.TnT()
+        vH1trial_2, vH1test_2 = VH1_2.TnT()
+        vH1trial_3, vH1test_3 = VH1_3.TnT()
+
+        laplaceH1_1 = BilinearForm(VH1_1, condense=condense)
+        laplaceH1_2 = BilinearForm(VH1_2, condense=condense)
+        laplaceH1_3 = BilinearForm(VH1_3, condense=condense)
+
+        laplaceH1_1 += nu * InnerProduct(grad(vH1trial_1), grad(vH1test_1)) * dx
+        laplaceH1_2 += nu * InnerProduct(grad(vH1trial_2), grad(vH1test_2)) * dx
+        laplaceH1_3 += nu * InnerProduct(grad(vH1trial_3), grad(vH1test_3)) * dx
+
+        pc_opts = {"ngs_amg_max_coarse_size": 5,
+                   # "ngs_amg_log_level": "normal",
+                   "ngs_amg_do_test": True,
+                   "ngs_amg_print_log": True}
+        laplaceH1_inverse_1 = Preconditioner(laplaceH1_1, "ngs_amg.h1_scal", **pc_opts)
+        laplaceH1_inverse_2 = Preconditioner(laplaceH1_2, "ngs_amg.h1_scal", **pc_opts)
+        laplaceH1_inverse_3 = Preconditioner(laplaceH1_3, "ngs_amg.h1_scal", **pc_opts)
+        laplaceH1_1.Assemble()
+        laplaceH1_2.Assemble()
+        laplaceH1_3.Assemble()
+
+        emb_comp1 = Embedding(VH1.ndof, VH1.Range(0))
+        emb_comp2 = Embedding(VH1.ndof, VH1.Range(1))
+        emb_comp3 = Embedding(VH1.ndof, VH1.Range(1))
+        laplaceH1_inverse = emb_comp1 @ laplaceH1_inverse_1 @ emb_comp1.T + emb_comp2 @ laplaceH1_inverse_2 @ emb_comp2.T + emb_comp3 @ laplaceH1_inverse_3 @ emb_comp3.T
+
+    #laplaceH1_inverse=Preconditioner(laplaceH1)
 
     eblocks = []
     for f in mesh.facets:  # edges in 2d, faces in 3d
