@@ -31,7 +31,7 @@ if geom_name == "tunnel":
     geom.AddRectangle((0, 0), (2, 0.41), bcs=("wall", "outlet", "wall", "inlet"))
     geom.AddCircle((0.2, 0.2), r=0.05, leftdomain=0, rightdomain=1, bc="cyl")
     ngmesh = geom.GenerateMesh(maxh=0.018)
-    diri = "wall|inlet|cyl"
+    diri = "inlet"
     inflow = "inlet"
 elif geom_name == "stretched":
     geom = None
@@ -41,7 +41,6 @@ else:
     geom = netgen.geom2d.unit_square
     diri = "left|top|bottom"
     inflow = "left"
-
 
 if rank == 0:
     if geom:
@@ -66,9 +65,17 @@ Q = L2(mesh, order=order - 1)
 Sigma.SetCouplingType(IntRange(0, Sigma.ndof), COUPLING_TYPE.HIDDEN_DOF)
 Sigma = Compress(Sigma)
 
-V = FESpace([V1, VHat, Sigma])
+if mesh.dim == 2:
+    S = L2(mesh, order=order - 1)
+else:
+    S = VectorL2(mesh, order=order - 1)
 
-(u, u_hat, sigma), (v, v_hat, tau) = V.TnT()
+S.SetCouplingType(IntRange(0, S.ndof), COUPLING_TYPE.HIDDEN_DOF)
+S = Compress(S)
+
+V = FESpace([V1, VHat, Sigma, S])
+
+(u, u_hat, sigma, W), (v, v_hat, tau, R) = V.TnT()
 p, q = Q.TnT()
 
 n = specialcf.normal(mesh.dim)
@@ -78,15 +85,24 @@ def tang(vec):
     return vec - (vec * n) * n
 
 
+if mesh.dim == 2:
+    def Skew2Vec(m):
+        return m[1, 0] - m[0, 1]
+else:
+    def Skew2Vec(m):
+        return CoefficientFunction((m[0, 1] - m[1, 0], m[2, 0] - m[0, 2], m[1, 2] - m[2, 1]))
+
 dS = dx(element_boundary=True)
 
-a_integrand = -1 / nu * InnerProduct(sigma, tau) * dx \
+a_integrand = -0.5 / nu * InnerProduct(sigma, tau) * dx \
+              + (InnerProduct(W, Skew2Vec(tau)) + InnerProduct(R, Skew2Vec(sigma))) * dx \
               + div(sigma) * v * dx + div(tau) * u * dx \
               + -(sigma * n) * n * (v * n) * dS \
               + -(tau * n) * n * (u * n) * dS \
               + -(tau * n) * tang(u_hat) * dS \
               + -(sigma * n) * tang(v_hat) * dS \
-              + nu * div(u) * div(v) * dx
+              + nu * div(u) * div(v) * dx #\
+              #+ 10**6*u * n * dS
 
 a = BilinearForm(V, eliminate_hidden=True, condense=True)
 a += a_integrand
@@ -109,8 +125,8 @@ if precon == "embedded":
 
     x_free = V.FreeDofs(condense)
 
-    blocks = [[d for d in dofnrs if x_free[d]] for dofnrs in (V.GetDofNrs(e) for e in mesh.facets) if len(dofnrs) > 0]   \
-     + [list(d for d in ar if d >= 0 and x_free[d]) for ar in (V.GetDofNrs(NodeId(FACE, k)) for k in range(mesh.nface))]
+    blocks = [[d for d in dofnrs if x_free[d]] for dofnrs in (V.GetDofNrs(e) for e in mesh.facets) if len(dofnrs) > 0]  # \
+    # + [list(d for d in ar if d >= 0 and x_free[d]) for ar in (V.GetDofNrs(NodeId(FACE, k)) for k in range(mesh.nface))]
 
     if comm.size > 1:
         precon_blockjac = BlockJacobiParallel(a.mat.local_mat, blocks)
@@ -133,7 +149,7 @@ print(evals[0], evals[-1], "cond", evals[-1] / evals[0])
 preconTimer.Stop()
 
 mp = BilinearForm(Q)
-mp += 1 / nu * p * q * dx
+mp += 0.5 / nu * p * q * dx
 preM = Preconditioner(mp, 'local')
 mp.Assemble()
 
@@ -146,8 +162,12 @@ g.Assemble()
 
 gfu = GridFunction(V, name="u")
 gfp = GridFunction(Q, name="p")
-uin = CoefficientFunction((1.5 * 4 * y * (1 - y) / (0.41 * 0.41), 0))
-gfu.components[0].Set(uin, definedon=mesh.Boundaries(inflow))
+if geom_name == "tunnel":
+    uin = CoefficientFunction((1.5 * 4 * y * (0.41 - y) / (0.41 * 0.41), 0))
+    gfu.components[0].Set(uin, definedon=mesh.Boundaries(inflow))
+else:
+    uin = CoefficientFunction((1.5 * 4 * y * (1 - y) / (0.41 * 0.41), 0))
+    gfu.components[0].Set(uin, definedon=mesh.Boundaries(inflow))
 
 K = BlockMatrix([[a_full.mat, b.mat.T], [b.mat, None]])
 C = BlockMatrix([[a_extended, None], [None, preM]])
