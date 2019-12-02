@@ -24,14 +24,16 @@ np = comm.size
 
 from netgen.geom2d import SplineGeometry
 
+precon = "embedded"
 geom_name = "tunnel"
+slip = True
 inflow = None
 if geom_name == "tunnel":
     geom = SplineGeometry()
     geom.AddRectangle((0, 0), (2, 0.41), bcs=("wall", "outlet", "wall", "inlet"))
     geom.AddCircle((0.2, 0.2), r=0.05, leftdomain=0, rightdomain=1, bc="cyl")
-    ngmesh = geom.GenerateMesh(maxh=0.018)
-    diri = "inlet"
+    # ngmesh = geom.GenerateMesh(maxh=0.036)
+    diri = "inlet" + ("" if slip else "|wall|cyl")
     inflow = "inlet"
 elif geom_name == "stretched":
     geom = None
@@ -39,12 +41,12 @@ elif geom_name == "stretched":
     inflow = "left"
 else:
     geom = netgen.geom2d.unit_square
-    diri = "left|top|bottom"
+    diri = "top|bottom"
     inflow = "left"
 
 if rank == 0:
     if geom:
-        ngmesh = geom.GenerateMesh(maxh=0.018)
+        ngmesh = geom.GenerateMesh(maxh=0.036)
         if comm.size > 1:
             ngmesh.Distribute(comm)
         mesh = Mesh(ngmesh)
@@ -55,12 +57,12 @@ else:
     ngmesh.SetGeometry(geom)
     mesh = Mesh(ngmesh)
 
-mesh.Curve(3)
+mesh.Curve(5)
 condense = True
 
-V1 = HDiv(mesh, order=order, dirichlet=diri, hodivfree=False)
+V1 = HDiv(mesh, order=order, dirichlet=diri+"|cyl|wall", hodivfree=False)
 Sigma = HCurlDiv(mesh, order=order - 1, orderinner=order, discontinuous=True)
-VHat = TangentialFacetFESpace(mesh, order=order - 1, dirichlet=".*")
+VHat = TangentialFacetFESpace(mesh, order=order - 1, dirichlet="inlet|outlet")
 Q = L2(mesh, order=order - 1)
 Sigma.SetCouplingType(IntRange(0, Sigma.ndof), COUPLING_TYPE.HIDDEN_DOF)
 Sigma = Compress(Sigma)
@@ -73,7 +75,17 @@ else:
 S.SetCouplingType(IntRange(0, S.ndof), COUPLING_TYPE.HIDDEN_DOF)
 S = Compress(S)
 
+if precon == "bddc":
+    for e in mesh.edges:
+        dofs = V1.GetDofNrs(e)
+        V1.SetCouplingType(dofs[1], COUPLING_TYPE.WIREBASKET_DOF)
+
 V = FESpace([V1, VHat, Sigma, S])
+
+if precon == "bddc":
+    for e in mesh.edges:
+        dofs = V1.GetDofNrs(e)
+        V.SetCouplingType(dofs[1], COUPLING_TYPE.WIREBASKET_DOF)
 
 (u, u_hat, sigma, W), (v, v_hat, tau, R) = V.TnT()
 p, q = Q.TnT()
@@ -102,7 +114,8 @@ a_integrand = -0.5 / nu * InnerProduct(sigma, tau) * dx \
               + -(tau * n) * tang(u_hat) * dS \
               + -(sigma * n) * tang(v_hat) * dS \
               + nu * div(u) * div(v) * dx #\
-              #+ 10**6*u * n * dS
+              #+ 10 ** 10 * u.Trace() * n * v.Trace() * n * ds("cyl|wall")  # \
+# + 10 ** 9 * u_hat.Trace() * v_hat.Trace() * ds("cyl|wall")
 
 a = BilinearForm(V, eliminate_hidden=True, condense=True)
 a += a_integrand
@@ -116,7 +129,7 @@ minResTimer = Timer("MyMinRes")
 preconTimer = Timer("Precon")
 
 preconTimer.Start()
-precon = "embedded"
+
 if precon == "embedded":
     Ahat_inv = CreateEmbeddingPreconditioner(V, nu, diri=diri)
 
@@ -144,6 +157,7 @@ I = IdentityMatrix()
 a_extended = (I + a.harmonic_extension) @ preA @ (I + a.harmonic_extension_trans) + a.inner_solve
 
 evals = list(EigenValues_Preconditioner(a.mat, preA))
+print(evals)
 print(evals[0], evals[-1], "cond", evals[-1] / evals[0])
 
 preconTimer.Stop()
@@ -159,6 +173,22 @@ f.Assemble()
 
 g = LinearForm(Q)
 g.Assemble()
+
+#import numpy as np
+#
+#gftest = GridFunction(V, name="ev")
+#gftest.vec.FV().NumPy()[:] = np.random.rand(len(gftest.vec))
+#
+#print(gftest.vec)
+#Draw(gftest.components[0], mesh, "ev")
+#
+#prod = Ahat_inv @ a_full.mat
+#
+#for i in range(10):
+#    gftest.vec.data = prod * gftest.vec
+#
+#Redraw()
+#input("ljsldf")
 
 gfu = GridFunction(V, name="u")
 gfp = GridFunction(Q, name="p")
@@ -176,7 +206,7 @@ sol = BlockVector([gfu.vec, gfp.vec])
 
 with TaskManager():  # pajetrace=100*1000*1000):
     minResTimer.Start()
-    MinRes(mat=K, pre=C, rhs=rhs, sol=sol, initialize=False, tol=1e-9, maxsteps=10000)
+    MinRes(mat=K, pre=C, rhs=rhs, sol=sol, initialize=False, tol=1e-9, maxsteps=1000)
     minResTimer.Stop()
 
 timers = dict((t["name"], t["time"]) for t in Timers())

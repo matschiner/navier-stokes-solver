@@ -77,10 +77,16 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*", hodivfree=Fa
     VH1 = VectorH1(mesh, order=1, dirichlet=diri)
 
     vH1trial, vH1test = VH1.TnT()
+    vchar = FacetFESpace(mesh, order=0)
+    gfchar = GridFunction(vchar, "char")
+    gfchar.vec.data[:] = 1
+    for e in mesh.Elements(BND):
+        if e.mat in ["cyl","wall"]:
+            gfchar.vec[vchar.GetDofNrs(e)[0]] = 0
 
     M = BilinearForm(trialspace=VH1, testspace=X)
     M += vH1trial * v_dual * dx
-    M += vH1trial * v_dual * dS
+    M += vH1trial * v_dual * gfchar * dS
     M += vH1trial * tang(v_hat) * dS
     M.Assemble()
 
@@ -96,11 +102,14 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*", hodivfree=Fa
     # E = Mw_inverse @ M.mat
     # ET = M.mat.T @ Mw_trans_inverse
 
-    precon = "h1amg"
+    ir = IntegrationRule([[0], [1]], [0.5, 0.5])
+
+    precon = "direct"
 
     if precon == "direct":
         laplaceH1 = BilinearForm(VH1, condense=condense)
         laplaceH1 += nu * 0.25 * InnerProduct(grad(vH1trial) + grad(vH1trial).trans, grad(vH1test) + grad(vH1test).trans) * dx
+        laplaceH1 += nu/specialcf.mesh_size * vH1trial * n * vH1test * n * ds("cyl|wall", intrules={SEGM: ir})
         laplaceH1_inverse = Preconditioner(laplaceH1, "direct")
         laplaceH1.Assemble()
     elif precon == "h1amg":
@@ -113,6 +122,8 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*", hodivfree=Fa
 
         laplaceH1 = BilinearForm(VH1, condense=condense)
         laplaceH1 += nu * 0.25 * InnerProduct(grad(vH1trial) + grad(vH1trial).trans, grad(vH1test) + grad(vH1test).trans) * dx
+        laplaceH1 += 10 ** 10 * vH1trial.Trace() * n * vH1test.Trace() * n * ds("cyl|wall", intrules={SEGM: ir})
+
         laplaceH1_inverse = Preconditioner(laplaceH1, "ngs_amg.elast2d", **pc_opts)
         laplaceH1.Assemble()
     elif precon == "h1amg_componentwise":
