@@ -24,6 +24,7 @@ np = comm.size
 
 from netgen.geom2d import SplineGeometry
 
+num_refinements = int(sys.argv[1])
 precon = "embedded"
 geom_name = "tunnel"
 slip = True
@@ -47,20 +48,21 @@ else:
 
 if rank == 0:
     if geom:
-        ngmesh = geom.GenerateMesh(maxh=0.036)
+        ngmesh = geom.GenerateMesh(maxh=0.04)
         if comm.size > 1:
             ngmesh.Distribute(comm)
-        mesh = Mesh(ngmesh)
     else:
         mesh = MakeStructured2DMesh(nx=4 * 3, ny=10 * 3, secondorder=True, quads=False, mapping=lambda x, y: (5 * x, y))
 else:
     ngmesh = netgen.meshing.Mesh.Receive(comm)
-    ngmesh.SetGeometry(geom)
-    mesh = Mesh(ngmesh)
+ngmesh.SetGeometry(geom)
+for n in range(num_refinements):
+    ngmesh.Refine()
+mesh = Mesh(ngmesh)
 
-mesh.Curve(5)
+mesh.Curve(3)
+
 condense = True
-
 V1 = HDiv(mesh, order=order, dirichlet=diri + "|" + ("|".join(slip_boundary)), hodivfree=False)
 Sigma = HCurlDiv(mesh, order=order - 1, orderinner=order, discontinuous=True)
 VHat = TangentialFacetFESpace(mesh, order=order - 1, dirichlet="inlet|outlet")
@@ -186,11 +188,13 @@ if comm.size > 1:
 else:
     a_extended = (I + a.harmonic_extension) @ preA @ (I + a.harmonic_extension_trans) + a.inner_solve
 
+preconTimer.Stop()
+
 evals = list(EigenValues_Preconditioner(a.mat, preA))
 # print(evals)
-print(evals[0], evals[-1], "cond", evals[-1] / evals[0])
+cond = evals[-1] / evals[0]
+# print(evals[0], evals[-1], "cond",cond )
 
-preconTimer.Stop()
 
 mp = BilinearForm(Q)
 mp += 0.5 / nu * p * q * dx
@@ -221,16 +225,27 @@ sol = BlockVector([gfu.vec, gfp.vec])
 with TaskManager():  # pajetrace=100*1000*1000):
     minResTimer.Start()
     print("starting minres")
-    solvers.MinRes(mat=K, pre=C, rhs=rhs, sol=sol, initialize=False, tol=1e-9, maxsteps=20000, printrates=comm.rank==0)
+    _, nits = MinRes(mat=K, pre=C, rhs=rhs, sol=sol, initialize=False, tol=1e-9, maxsteps=20000, printrates=comm.rank == 0)
     minResTimer.Stop()
 
 timers = dict((t["name"], t["time"]) for t in Timers())
-if comm.rank==0:
-    print("MinRes", timers["MyMinRes"])
-    print("Precon", timers["Precon"])
 
-Draw(gfu.components[0], mesh, "v")
-Draw(gfp, mesh, "p")
+result_stats = {
+    "timeMinRes": timers["MyMinRes"],
+    "timePrecon": timers["Precon"],
+    "nits": nits,
+    "numElements": mesh.ne,
+    "numDofs": V.ndof,
+    "cond": cond
+}
+
+if comm.rank == 1:
+    import pprint
+
+    pprint.pprint(result_stats)
+
 if comm.size == 1:
+    Draw(gfu.components[0], mesh, "v")
+    Draw(gfp, mesh, "p")
     input("finish")
 # Draw(gfu.components[1], mesh, "v_hat")

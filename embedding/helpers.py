@@ -66,7 +66,7 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*", hodivfree=Fa
     (u, u_hat, _, _), (v, v_hat, _, _) = X.TnT()
     xfree = X.FreeDofs()
 
-    #projector_lo = Projector(xfree, True)
+    # projector_lo = Projector(xfree, True)
 
     n = specialcf.normal(mesh.dim)
 
@@ -107,7 +107,7 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*", hodivfree=Fa
     if precon == "direct":
         laplaceH1 = BilinearForm(VH1, condense=condense)
         laplaceH1 += nu * 0.25 * InnerProduct(grad(vH1trial) + grad(vH1trial).trans, grad(vH1test) + grad(vH1test).trans) * dx
-        laplaceH1 += nu/specialcf.mesh_size * vH1trial * n * vH1test * n * ds("cyl|wall", intrules={SEGM: ir})
+        laplaceH1 += nu / specialcf.mesh_size * vH1trial * n * vH1test * n * ds("cyl|wall", intrules={SEGM: ir})
         laplaceH1_inverse = Preconditioner(laplaceH1, "direct")
         laplaceH1.Assemble()
     elif precon == "h1amg":
@@ -198,6 +198,8 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*", hodivfree=Fa
     emb = EmbeddingTransformation(M, Mw, eblocks, fblocks)
 
     # laplaceH1_inverse_wrapped = WrapMatrix(laplaceH1_inverse)
+    proj = Projector(X.FreeDofs(True), True)
+    emb = proj @ emb
     if mpi_world.size > 1:
         emb = ParallelMatrix(emb,
                              row_pardofs=M.mat.row_pardofs,
@@ -212,10 +214,7 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*", hodivfree=Fa
     # Draw(gfx.components[0])
     # input("lj")
 
-    # proj = Projector(X.FreeDofs(True), True)
-
     return emb @ laplaceH1_inverse @ emb.T
-    # return emb @ laplaceH1_inverse_wrapped @ emb.T
 
 
 """   class WrapMatrix(BaseMatrix):
