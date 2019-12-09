@@ -1,5 +1,5 @@
 from ngsolve import *
-import ngs_amg
+#import ngs_amg
 
 dS = dx(element_boundary=True)
 
