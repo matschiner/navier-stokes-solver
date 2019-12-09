@@ -2,7 +2,6 @@ import os
 from pathlib import Path
 from ngsolve import *
 from netgen.geom2d import SplineGeometry
-from solvers.krylovspace import *
 
 # SetTestoutFile("test.out")
 ngsglobals.msg_level = 0
