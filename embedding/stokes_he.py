@@ -1,4 +1,6 @@
+import os
 import sys
+from pathlib import Path
 
 from ngsolve import *
 from ngsolve.la import EigenValues_Preconditioner
@@ -46,15 +48,38 @@ else:
     diri = "top|bottom"
     inflow = "left"
 
+from_file = False
+mesh_size = 0.01
+file_name = "tunnel%f.vol.gz" % mesh_size
 if rank == 0:
     if geom:
-        ngmesh = geom.GenerateMesh(maxh=0.04)
-        if comm.size > 1:
+
+        file = Path(file_name)
+
+        if os.path.isfile(file_name):
+            print("loaded mesh")
+            from_file = True
+            ngmesh = netgen.meshing.Mesh(dim=2, comm=comm)
+            comm.Sum(1)
+            ngmesh.Load(file_name)
+        else:
+            print("generating mesh")
+            ngmesh = geom.GenerateMesh(maxh=mesh_size)
+            ngmesh.Save(file_name)
+            comm.Sum(0)
+        if comm.size > 1 and not from_file:
             ngmesh.Distribute(comm)
+
     else:
         mesh = MakeStructured2DMesh(nx=4 * 3, ny=10 * 3, secondorder=True, quads=False, mapping=lambda x, y: (5 * x, y))
-else:
-    ngmesh = netgen.meshing.Mesh.Receive(comm)
+if rank != 0:
+    if comm.Sum(0) == 0:
+        ngmesh = netgen.meshing.Mesh.Receive(comm)
+    else:
+        ngmesh = netgen.meshing.Mesh(dim=2, comm=comm)
+        ngmesh.Load(file_name)
+
+comm.Barrier()
 ngmesh.SetGeometry(geom)
 for n in range(num_refinements):
     ngmesh.Refine()
@@ -224,7 +249,6 @@ sol = BlockVector([gfu.vec, gfp.vec])
 
 with TaskManager():  # pajetrace=100*1000*1000):
     minResTimer.Start()
-    print("starting minres")
     _, nits = MinRes(mat=K, pre=C, rhs=rhs, sol=sol, initialize=False, tol=1e-9, maxsteps=20000, printrates=comm.rank == 0)
     minResTimer.Stop()
 
