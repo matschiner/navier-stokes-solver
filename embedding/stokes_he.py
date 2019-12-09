@@ -221,12 +221,13 @@ sol = BlockVector([gfu.vec, gfp.vec])
 with TaskManager():  # pajetrace=100*1000*1000):
     minResTimer.Start()
     print("starting minres")
-    MinRes(mat=K, pre=C, rhs=rhs, sol=sol, initialize=False, tol=1e-9, maxsteps=1000)
+    solvers.MinRes(mat=K, pre=C, rhs=rhs, sol=sol, initialize=False, tol=1e-9, maxsteps=20000, printrates=comm.rank==0)
     minResTimer.Stop()
 
 timers = dict((t["name"], t["time"]) for t in Timers())
-print("MinRes", timers["MyMinRes"])
-print("Precon", timers["Precon"])
+if comm.rank==0:
+    print("MinRes", timers["MyMinRes"])
+    print("Precon", timers["Precon"])
 
 Draw(gfu.components[0], mesh, "v")
 Draw(gfp, mesh, "p")

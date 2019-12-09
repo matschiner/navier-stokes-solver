@@ -66,7 +66,7 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*", hodivfree=Fa
     (u, u_hat, _, _), (v, v_hat, _, _) = X.TnT()
     xfree = X.FreeDofs()
 
-    projector_lo = Projector(xfree, True)
+    #projector_lo = Projector(xfree, True)
 
     n = specialcf.normal(mesh.dim)
 
@@ -101,9 +101,9 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*", hodivfree=Fa
 
     # E = Mw_inverse @ M.mat
     # ET = M.mat.T @ Mw_trans_inverse
+    ir = IntegrationRule([[0], [1]], [0.5, 0.5])
 
     precon = "h1amg"
-
     if precon == "direct":
         laplaceH1 = BilinearForm(VH1, condense=condense)
         laplaceH1 += nu * 0.25 * InnerProduct(grad(vH1trial) + grad(vH1trial).trans, grad(vH1test) + grad(vH1test).trans) * dx
@@ -120,7 +120,7 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*", hodivfree=Fa
 
         laplaceH1 = BilinearForm(VH1, condense=condense)
         laplaceH1 += nu * 0.25 * InnerProduct(grad(vH1trial) + grad(vH1trial).trans, grad(vH1test) + grad(vH1test).trans) * dx
-        ir = IntegrationRule([[0], [1]], [0.5, 0.5])
+
         laplaceH1 += 10 ** 10 * vH1trial.Trace() * n * vH1test.Trace() * n * ds("cyl|wall", intrules={SEGM: ir})
 
         laplaceH1_inverse = Preconditioner(laplaceH1, "ngs_amg.elast2d", **pc_opts)
@@ -214,7 +214,7 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*", hodivfree=Fa
 
     # proj = Projector(X.FreeDofs(True), True)
 
-    return projector_lo @ emb @ laplaceH1_inverse @ emb.T @ projector_lo
+    return emb @ laplaceH1_inverse @ emb.T
     # return emb @ laplaceH1_inverse_wrapped @ emb.T
 
 
