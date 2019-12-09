@@ -49,7 +49,7 @@ else:
     inflow = "left"
 
 from_file = False
-mesh_size = 0.01
+mesh_size = 0.05
 file_name = "tunnel%f.vol.gz" % mesh_size
 if rank == 0:
     if geom:
@@ -84,13 +84,15 @@ ngmesh.SetGeometry(geom)
 for n in range(num_refinements):
     ngmesh.Refine()
 mesh = Mesh(ngmesh)
-
+#print(mesh.nv)
+#print("ne",mesh.ne, mesh.nedge, mesh.nv)
+#quit()
 mesh.Curve(3)
 
 condense = True
 V1 = HDiv(mesh, order=order, dirichlet=diri + "|" + ("|".join(slip_boundary)), hodivfree=False)
 Sigma = HCurlDiv(mesh, order=order - 1, orderinner=order, discontinuous=True)
-VHat = TangentialFacetFESpace(mesh, order=order - 1, dirichlet="inlet|outlet")
+VHat = TangentialFacetFESpace(mesh, order=order - 1, dirichlet="inlet|outlet"+("" if slip else "|".join(slip_boundary)))
 Q = L2(mesh, order=order - 1)
 Sigma.SetCouplingType(IntRange(0, Sigma.ndof), COUPLING_TYPE.HIDDEN_DOF)
 Sigma = Compress(Sigma)
@@ -218,7 +220,7 @@ preconTimer.Stop()
 evals = list(EigenValues_Preconditioner(a.mat, preA))
 # print(evals)
 cond = evals[-1] / evals[0]
-# print(evals[0], evals[-1], "cond",cond )
+print(evals[0], evals[-1], "cond",cond )
 
 
 mp = BilinearForm(Q)
@@ -235,6 +237,7 @@ g.Assemble()
 
 gfu = GridFunction(V, name="u")
 gfp = GridFunction(Q, name="p")
+gfp.vec[:]=0
 if geom_name == "tunnel":
     uin = CoefficientFunction((1.5 * 4 * y * (0.41 - y) / (0.41 * 0.41), 0))
     gfu.components[0].Set(uin, definedon=mesh.Boundaries(inflow))
@@ -247,9 +250,17 @@ C = BlockMatrix([[a_extended, None], [None, preM]])
 rhs = BlockVector([f.vec, g.vec])
 sol = BlockVector([gfu.vec, gfp.vec])
 
+res=a_full.mat.CreateColVector()
+res.data=a_full.mat*gfu.vec
+print("normtmp",Norm(res))
+
+#tmp=C.CreateColVector()
+#tmp.data=C*res
+#print("normtmp",[Norm(res[i]) for i in range(2)])
+
 with TaskManager():  # pajetrace=100*1000*1000):
     minResTimer.Start()
-    _, nits = MinRes(mat=K, pre=C, rhs=rhs, sol=sol, initialize=False, tol=1e-9, maxsteps=20000, printrates=comm.rank == 0)
+    _, nits = MinRes(mat=K, pre=C, rhs=rhs, sol=sol, initialize=False, tol=1e-9, maxsteps=10000, printrates=comm.rank == 0)
     minResTimer.Stop()
 
 timers = dict((t["name"], t["time"]) for t in Timers())
@@ -268,8 +279,13 @@ if comm.rank == 1:
 
     pprint.pprint(result_stats)
 
+print("norm",Norm(gfu.vec))
 if comm.size == 1:
     Draw(gfu.components[0], mesh, "v")
     Draw(gfp, mesh, "p")
     input("finish")
 # Draw(gfu.components[1], mesh, "v_hat")
+
+
+#vtk = VTKOutput(ma=mesh, coefs=[gfu.components[0][0],gfu.components[0][1], gfp], names=["solu0","solu1","solp"], filename="vtkout/vtkout_p"+str(rank), subdivision=2)
+#vtk.Do()

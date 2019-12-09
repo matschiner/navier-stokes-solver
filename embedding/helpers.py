@@ -103,7 +103,7 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*", hodivfree=Fa
     # ET = M.mat.T @ Mw_trans_inverse
     ir = IntegrationRule([[0], [1]], [0.5, 0.5])
 
-    precon = "h1amg"
+    precon = "direct"
     if precon == "direct":
         laplaceH1 = BilinearForm(VH1, condense=condense)
         laplaceH1 += nu * 0.25 * InnerProduct(grad(vH1trial) + grad(vH1trial).trans, grad(vH1test) + grad(vH1test).trans) * dx
