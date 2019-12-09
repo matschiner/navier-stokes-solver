@@ -28,12 +28,13 @@ precon = "embedded"
 geom_name = "tunnel"
 slip = True
 inflow = None
+slip_boundary = ["cyl", "wall"]
 if geom_name == "tunnel":
     geom = SplineGeometry()
     geom.AddRectangle((0, 0), (2, 0.41), bcs=("wall", "outlet", "wall", "inlet"))
     geom.AddCircle((0.2, 0.2), r=0.05, leftdomain=0, rightdomain=1, bc="cyl")
     # ngmesh = geom.GenerateMesh(maxh=0.036)
-    diri = "inlet" + ("" if slip else "|wall|cyl")
+    diri = "inlet" + ("" if slip else "|" + ("|".join(slip_boundary)))
     inflow = "inlet"
 elif geom_name == "stretched":
     geom = None
@@ -60,7 +61,7 @@ else:
 mesh.Curve(5)
 condense = True
 
-V1 = HDiv(mesh, order=order, dirichlet=diri+"|cyl|wall", hodivfree=False)
+V1 = HDiv(mesh, order=order, dirichlet=diri + "|" + ("|".join(slip_boundary)), hodivfree=False)
 Sigma = HCurlDiv(mesh, order=order - 1, orderinner=order, discontinuous=True)
 VHat = TangentialFacetFESpace(mesh, order=order - 1, dirichlet="inlet|outlet")
 Q = L2(mesh, order=order - 1)
@@ -113,8 +114,8 @@ a_integrand = -0.5 / nu * InnerProduct(sigma, tau) * dx \
               + -(tau * n) * n * (u * n) * dS \
               + -(tau * n) * tang(u_hat) * dS \
               + -(sigma * n) * tang(v_hat) * dS \
-              + nu * div(u) * div(v) * dx #\
-              #+ 10 ** 10 * u.Trace() * n * v.Trace() * n * ds("cyl|wall")  # \
+              + nu * div(u) * div(v) * dx  # \
+# + 10 ** 10 * u.Trace() * n * v.Trace() * n * ds("cyl|wall")  # \
 # + 10 ** 9 * u_hat.Trace() * v_hat.Trace() * ds("cyl|wall")
 
 a = BilinearForm(V, eliminate_hidden=True, condense=True)
@@ -131,7 +132,7 @@ preconTimer = Timer("Precon")
 preconTimer.Start()
 
 if precon == "embedded":
-    Ahat_inv = CreateEmbeddingPreconditioner(V, nu, diri=diri)
+    Ahat_inv = CreateEmbeddingPreconditioner(V, nu, diri=diri, slip_boundary=slip_boundary)
 
     a.Assemble()
     b.Assemble()
@@ -142,9 +143,17 @@ if precon == "embedded":
     # + [list(d for d in ar if d >= 0 and x_free[d]) for ar in (V.GetDofNrs(NodeId(FACE, k)) for k in range(mesh.nface))]
 
     if comm.size > 1:
-        precon_blockjac = BlockJacobiParallel(a.mat.local_mat, blocks)
+        # precon_blockjac = BlockJacobiParallel(a.mat.local_mat, blocks)
+        precon_blockjac_unwrapped = a.mat.local_mat.CreateBlockSmoother(blocks, parallel=True)
+        precon_blockjac = ParallelMatrix(
+            precon_blockjac_unwrapped,
+            row_pardofs=a.mat.row_pardofs,
+            col_pardofs=a.mat.col_pardofs,
+            op=ParallelMatrix.D2D,
+        )
     else:
         precon_blockjac = a.mat.CreateBlockSmoother(blocks)
+
     preA = precon_blockjac + Ahat_inv
 else:
     preA = Preconditioner(a, 'bddc')
@@ -154,10 +163,31 @@ else:
 a_full.Assemble()
 
 I = IdentityMatrix()
-a_extended = (I + a.harmonic_extension) @ preA @ (I + a.harmonic_extension_trans) + a.inner_solve
+if comm.size > 1:
+    op_tmp1 = ParallelMatrix(
+        I + a.harmonic_extension,
+        row_pardofs=a.mat.row_pardofs,
+        col_pardofs=a.mat.col_pardofs,
+        op=ParallelMatrix.C2C,
+    )
+    op_tmp2 = ParallelMatrix(
+        I + a.harmonic_extension_trans,
+        row_pardofs=a.mat.row_pardofs,
+        col_pardofs=a.mat.col_pardofs,
+        op=ParallelMatrix.D2D,
+    )
+    op_tmp3 = ParallelMatrix(
+        a.inner_solve,
+        row_pardofs=a.mat.row_pardofs,
+        col_pardofs=a.mat.col_pardofs,
+        op=ParallelMatrix.D2C,
+    )
+    a_extended = op_tmp1 @ preA @ op_tmp2 + op_tmp3
+else:
+    a_extended = (I + a.harmonic_extension) @ preA @ (I + a.harmonic_extension_trans) + a.inner_solve
 
 evals = list(EigenValues_Preconditioner(a.mat, preA))
-print(evals)
+# print(evals)
 print(evals[0], evals[-1], "cond", evals[-1] / evals[0])
 
 preconTimer.Stop()
@@ -173,22 +203,6 @@ f.Assemble()
 
 g = LinearForm(Q)
 g.Assemble()
-
-#import numpy as np
-#
-#gftest = GridFunction(V, name="ev")
-#gftest.vec.FV().NumPy()[:] = np.random.rand(len(gftest.vec))
-#
-#print(gftest.vec)
-#Draw(gftest.components[0], mesh, "ev")
-#
-#prod = Ahat_inv @ a_full.mat
-#
-#for i in range(10):
-#    gftest.vec.data = prod * gftest.vec
-#
-#Redraw()
-#input("ljsldf")
 
 gfu = GridFunction(V, name="u")
 gfp = GridFunction(Q, name="p")
@@ -206,6 +220,7 @@ sol = BlockVector([gfu.vec, gfp.vec])
 
 with TaskManager():  # pajetrace=100*1000*1000):
     minResTimer.Start()
+    print("starting minres")
     MinRes(mat=K, pre=C, rhs=rhs, sol=sol, initialize=False, tol=1e-9, maxsteps=1000)
     minResTimer.Stop()
 
@@ -215,5 +230,6 @@ print("Precon", timers["Precon"])
 
 Draw(gfu.components[0], mesh, "v")
 Draw(gfp, mesh, "p")
-input("finish")
+if comm.size == 1:
+    input("finish")
 # Draw(gfu.components[1], mesh, "v_hat")

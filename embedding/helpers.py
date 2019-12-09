@@ -60,7 +60,7 @@ class EmbeddingTransformation(BaseMatrix):
         return self.M.height
 
 
-def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*", hodivfree=False):
+def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*", hodivfree=False, slip_boundary=[]):
     mesh = X.mesh
 
     (u, u_hat, _, _), (v, v_hat, _, _) = X.TnT()
@@ -81,7 +81,7 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*", hodivfree=Fa
     gfchar = GridFunction(vchar, "char")
     gfchar.vec.data[:] = 1
     for e in mesh.Elements(BND):
-        if e.mat in ["cyl","wall"]:
+        if e.mat in slip_boundary:
             gfchar.vec[vchar.GetDofNrs(e)[0]] = 0
 
     M = BilinearForm(trialspace=VH1, testspace=X)
@@ -102,9 +102,7 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*", hodivfree=Fa
     # E = Mw_inverse @ M.mat
     # ET = M.mat.T @ Mw_trans_inverse
 
-    ir = IntegrationRule([[0], [1]], [0.5, 0.5])
-
-    precon = "direct"
+    precon = "h1amg"
 
     if precon == "direct":
         laplaceH1 = BilinearForm(VH1, condense=condense)
@@ -122,6 +120,7 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*", hodivfree=Fa
 
         laplaceH1 = BilinearForm(VH1, condense=condense)
         laplaceH1 += nu * 0.25 * InnerProduct(grad(vH1trial) + grad(vH1trial).trans, grad(vH1test) + grad(vH1test).trans) * dx
+        ir = IntegrationRule([[0], [1]], [0.5, 0.5])
         laplaceH1 += 10 ** 10 * vH1trial.Trace() * n * vH1test.Trace() * n * ds("cyl|wall", intrules={SEGM: ir})
 
         laplaceH1_inverse = Preconditioner(laplaceH1, "ngs_amg.elast2d", **pc_opts)
