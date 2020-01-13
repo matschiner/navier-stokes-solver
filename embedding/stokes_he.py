@@ -247,14 +247,6 @@ C = BlockMatrix([[a_extended, None], [None, preM]])
 rhs = BlockVector([f.vec, g.vec])
 sol = BlockVector([gfu.vec, gfp.vec])
 
-res = a_full.mat.CreateColVector()
-res.data = a_full.mat * gfu.vec
-print("normtmp", Norm(res))
-
-# tmp=C.CreateColVector()
-# tmp.data=C*res
-# print("normtmp",[Norm(res[i]) for i in range(2)])
-
 with TaskManager():  # pajetrace=100*1000*1000):
     minResTimer.Start()
     _, nits = MinRes(mat=K, pre=C, rhs=rhs, sol=sol, initialize=False, tol=1e-9, maxsteps=10000, printrates=comm.rank == 0)
