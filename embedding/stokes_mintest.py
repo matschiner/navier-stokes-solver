@@ -74,7 +74,7 @@ Sigma = HCurlDiv(mesh, order=order - 1, orderinner=order, discontinuous=True)
 VHat = TangentialFacetFESpace(mesh, order=order - 1, dirichlet="inlet|outlet" + ("" if slip else "|".join(slip_boundary)))
 Q = L2(mesh, order=order - 1)
 Sigma.SetCouplingType(IntRange(0, Sigma.ndof), COUPLING_TYPE.HIDDEN_DOF)
-#Sigma = Compress(Sigma)
+Sigma = Compress(Sigma)
 
 if mesh.dim == 2:
     S = L2(mesh, order=order - 1)
@@ -82,7 +82,7 @@ else:
     S = VectorL2(mesh, order=order - 1)
 
 S.SetCouplingType(IntRange(0, S.ndof), COUPLING_TYPE.HIDDEN_DOF)
-#S = Compress(S)
+S = Compress(S)
 
 V = FESpace([V1, VHat, Sigma, S])
 
@@ -114,7 +114,7 @@ a_integrand = -0.5 / nu * InnerProduct(sigma, tau) * dx \
               + -(sigma * n) * tang(v_hat) * dS \
               + nu * div(u) * div(v) * dx  # \
 
-a_full = BilinearForm(V, eliminate_hidden=False, condense=True, elmatev=True, print=True, printelmat=True)
+a_full = BilinearForm(V, eliminate_hidden=True, condense=False, elmatev=True, print=True, printelmat=True)
 a_full += a_integrand
 a_full.Assemble()
 
