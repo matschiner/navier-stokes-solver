@@ -6,11 +6,8 @@ from ngsolve import *
 from ngsolve.la import EigenValues_Preconditioner
 from solvers.krylovspace import *
 from solvers.krylovspace import MinRes
-from solvers.bramblepasciak import BramblePasciakCG as BPCG
-from multiplicative_precond.preconditioners import MultiplicativePrecond
-import netgen.gui
+
 from embedding.helpers import CreateEmbeddingPreconditioner
-from blockjacobi_parallel import *
 from ngsolve.meshes import MakeStructured2DMesh
 
 ngsglobals.msg_level = 0
