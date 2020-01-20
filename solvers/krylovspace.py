@@ -393,7 +393,8 @@ def MinRes(mat, rhs, pre=None, sol=None, maxsteps=100, printrates=True, initiali
         # update of residuum
         ResNorm = abs(s_new) * ResNorm_old
         if (printrates):
-            print("\rit = ", k, " err = ", ResNorm, " " * 20,    end="")
+            #print("\rit = ", k, " err = ", ResNorm, " " * 20,    end="")
+            print("it = ", k, " err = ", ResNorm, " " * 20)
         if ResNorm < tol: break
         k += 1
 
@@ -413,8 +414,10 @@ def MinRes(mat, rhs, pre=None, sol=None, maxsteps=100, printrates=True, initiali
         gamma = gamma_new
         ResNorm_old = ResNorm
     else:
-        print("Warning: MinRes did not converge to TOL")
-    print("\n")
+        if  ngsolve.mpi_world.rank==0:
+            print("Warning: MinRes did not converge to TOL")
+    if ngsolve.mpi_world.rank==0:
+        print("\n")
 
     return u, k
 

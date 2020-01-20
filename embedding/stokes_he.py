@@ -29,16 +29,16 @@ num_refinements = int(sys.argv[1])
 precon = "embedded"
 auxiliary_precon = "direct"
 geom_name = "tunnel"
-slip = False
+slip = True 
 inflow = None
 
-slip_boundary = ["cyl", "wall"]
+slip_boundary = ["wall"]
 if geom_name == "tunnel":
     geom = SplineGeometry()
     geom.AddRectangle((0, 0), (2, 0.41), bcs=("wall", "outlet", "wall", "inlet"))
     geom.AddCircle((0.2, 0.2), r=0.05, leftdomain=0, rightdomain=1, bc="cyl")
     # ngmesh = geom.GenerateMesh(maxh=0.036)
-    diri = "inlet" + ("" if slip else "|" + ("|".join(slip_boundary)))
+    diri = "inlet|cyl" + ("" if slip else "|" + ("|".join(slip_boundary)))
     inflow = "inlet"
 elif geom_name == "stretched":
     geom = None
@@ -217,7 +217,8 @@ preconTimer.Stop()
 evals = list(EigenValues_Preconditioner(a.mat, preA))
 # print(evals)
 cond = evals[-1] / evals[0]
-print(evals[0], evals[-1], "cond", cond)
+if comm.rank==0:
+     print(evals[0], evals[-1], "cond", cond)
 
 mp = BilinearForm(Q)
 mp += 0.5 / nu * p * q * dx

@@ -29,7 +29,6 @@ class EmbeddingTransformation(BaseMatrix):
         self.Vrhs -= self.Mw * self.Vup
         y.data += self.Vup
         y.data += self.smootherF * self.Vrhs
-
         # y.data[:] = 0
         # self.smoother.Smooth(y, tmp)
 
@@ -108,7 +107,7 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*", hodivfree=Fa
         laplaceH1 = BilinearForm(VH1, condense=condense)
         laplaceH1 += nu * 0.25 * InnerProduct(grad(vH1trial) + grad(vH1trial).trans, grad(vH1test) + grad(vH1test).trans) * dx
         if slip:
-            laplaceH1 += nu / specialcf.mesh_size * vH1trial * n * vH1test * n * ds("cyl|wall", intrules={SEGM: ir})
+            laplaceH1 += nu / specialcf.mesh_size * vH1trial * n * vH1test * n * ds("|".join(slip_boundary), intrules={SEGM: ir})
         laplaceH1_inverse = Preconditioner(laplaceH1, "direct")
         laplaceH1.Assemble()
     elif auxiliary_precon == "h1amg":
@@ -196,16 +195,46 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*", hodivfree=Fa
         fblocks.append([d for d in X.GetDofNrs(f) if d != -2])
 
     emb = EmbeddingTransformation(M, Mw, eblocks, fblocks)
+    class WrapMatrix(BaseMatrix):
+       def __init__(self, toWrap):
+           super(WrapMatrix, self).__init__()
+           self.toWrap = toWrap
 
-    # laplaceH1_inverse_wrapped = WrapMatrix(laplaceH1_inverse)
+       def Mult(self, x, y, ):
+           y.data = self.toWrap * x
+       #    y.Cumulate()
+       #    y.Distribute()
+       #    y.Cumulate()
+       #    y.Distribute()
+       #    y.Cumulate()
+       def CreateColVector(self):
+           return self.toWrap.CreateColVector()
+
+       def CreateRowVector(self):
+           return self.toWrap.CreateRowVector()
+
+       def IsComplex(self):
+           return False 
+       def Height(self):
+           return self.toWrap.height
+       def Width(self):
+           return self.toWrap.width
+
+
     proj = Projector(X.FreeDofs(True), True)
     emb = proj @ emb
+    emb_trans = emb.T
     if mpi_world.size > 1:
         emb = ParallelMatrix(emb,
                              row_pardofs=M.mat.row_pardofs,
                              col_pardofs=M.mat.col_pardofs,
                              op=ParallelMatrix.C2C)
+        emb_trans = ParallelMatrix(emb_trans,
+                             row_pardofs=M.mat.col_pardofs,
+                             col_pardofs=M.mat.row_pardofs,
+                             op=ParallelMatrix.D2D)
 
+    emb = WrapMatrix(emb)
     # test if embedding transformation is doing the right thing
     # gfh1 = GridFunction(VH1)
     # gfx = GridFunction(X)
@@ -214,7 +243,7 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*", hodivfree=Fa
     # Draw(gfx.components[0])
     # input("lj")
 
-    return emb @ laplaceH1_inverse @ emb.T
+    return emb @ laplaceH1_inverse @ emb_trans
 
 
 """   class WrapMatrix(BaseMatrix):
