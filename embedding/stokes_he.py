@@ -180,7 +180,7 @@ if precon == "embedded":
     else:
         precon_blockjac = a.mat.CreateBlockSmoother(blocks)
 
-    preA = Ahat_inv
+    preA = Ahat_inv + precon_blockjac
 else:
     preA = Preconditioner(a, 'bddc')
     a.Assemble()
