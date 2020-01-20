@@ -12,6 +12,8 @@ from ngsolve.meshes import MakeStructured2DMesh
 
 ngsglobals.msg_level = 0
 
+if mpi_world.size == 1:
+    import netgen.gui
 # viscosity
 nu = 1e-3
 
@@ -25,9 +27,11 @@ from netgen.geom2d import SplineGeometry
 
 num_refinements = int(sys.argv[1])
 precon = "embedded"
+auxiliary_precon = "direct"
 geom_name = "tunnel"
-slip = True
+slip = False
 inflow = None
+
 slip_boundary = ["cyl", "wall"]
 if geom_name == "tunnel":
     geom = SplineGeometry()
@@ -81,15 +85,12 @@ ngmesh.SetGeometry(geom)
 for n in range(num_refinements):
     ngmesh.Refine()
 mesh = Mesh(ngmesh)
-# print(mesh.nv)
-# print("ne",mesh.ne, mesh.nedge, mesh.nv)
-# quit()
 mesh.Curve(3)
 
 condense = True
 V1 = HDiv(mesh, order=order, dirichlet=diri + "|" + ("|".join(slip_boundary)), hodivfree=False)
 Sigma = HCurlDiv(mesh, order=order - 1, orderinner=order, discontinuous=True)
-VHat = TangentialFacetFESpace(mesh, order=order - 1, dirichlet="inlet|outlet" + ("" if slip else "|".join(slip_boundary)))
+VHat = TangentialFacetFESpace(mesh, order=order - 1, dirichlet="inlet|outlet" if slip else ".*")
 Q = L2(mesh, order=order - 1)
 Sigma.SetCouplingType(IntRange(0, Sigma.ndof), COUPLING_TYPE.HIDDEN_DOF)
 Sigma = Compress(Sigma)
@@ -158,7 +159,7 @@ preconTimer = Timer("Precon")
 preconTimer.Start()
 
 if precon == "embedded":
-    Ahat_inv = CreateEmbeddingPreconditioner(V, nu, diri=diri, slip_boundary=slip_boundary)
+    Ahat_inv = CreateEmbeddingPreconditioner(V, nu, diri=diri, slip=slip, slip_boundary=slip_boundary, auxiliary_precon=auxiliary_precon)
 
     a.Assemble()
     b.Assemble()
@@ -169,7 +170,6 @@ if precon == "embedded":
     # + [list(d for d in ar if d >= 0 and x_free[d]) for ar in (V.GetDofNrs(NodeId(FACE, k)) for k in range(mesh.nface))]
 
     if comm.size > 1:
-        # precon_blockjac = BlockJacobiParallel(a.mat.local_mat, blocks)
         precon_blockjac_unwrapped = a.mat.local_mat.CreateBlockSmoother(blocks, parallel=True)
         precon_blockjac = ParallelMatrix(
             precon_blockjac_unwrapped,
@@ -180,7 +180,7 @@ if precon == "embedded":
     else:
         precon_blockjac = a.mat.CreateBlockSmoother(blocks)
 
-    preA = precon_blockjac + Ahat_inv
+    preA = Ahat_inv
 else:
     preA = Preconditioner(a, 'bddc')
     a.Assemble()
@@ -263,7 +263,7 @@ result_stats = {
     "cond": cond
 }
 
-if comm.rank == 1:
+if comm.rank == 1 or comm.size == 1:
     import pprint
 
     pprint.pprint(result_stats)

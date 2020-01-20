@@ -60,7 +60,7 @@ class EmbeddingTransformation(BaseMatrix):
         return self.M.height
 
 
-def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*", hodivfree=False, slip_boundary=[]):
+def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*", hodivfree=False, slip=False, slip_boundary=[], auxiliary_precon="direct"):
     mesh = X.mesh
 
     (u, u_hat, _, _), (v, v_hat, _, _) = X.TnT()
@@ -80,9 +80,10 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*", hodivfree=Fa
     vchar = FacetFESpace(mesh, order=0)
     gfchar = GridFunction(vchar, "char")
     gfchar.vec.data[:] = 1
-    for e in mesh.Elements(BND):
-        if e.mat in slip_boundary:
-            gfchar.vec[vchar.GetDofNrs(e)[0]] = 0
+    if slip:
+        for e in mesh.Elements(BND):
+            if e.mat in slip_boundary:
+                gfchar.vec[vchar.GetDofNrs(e)[0]] = 0
 
     M = BilinearForm(trialspace=VH1, testspace=X)
     M += vH1trial * v_dual * dx
@@ -103,14 +104,14 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*", hodivfree=Fa
     # ET = M.mat.T @ Mw_trans_inverse
     ir = IntegrationRule([[0], [1]], [0.5, 0.5])
 
-    precon = "h1amg"
-    if precon == "direct":
+    if auxiliary_precon == "direct":
         laplaceH1 = BilinearForm(VH1, condense=condense)
         laplaceH1 += nu * 0.25 * InnerProduct(grad(vH1trial) + grad(vH1trial).trans, grad(vH1test) + grad(vH1test).trans) * dx
-        laplaceH1 += nu / specialcf.mesh_size * vH1trial * n * vH1test * n * ds("cyl|wall", intrules={SEGM: ir})
+        if slip:
+            laplaceH1 += nu / specialcf.mesh_size * vH1trial * n * vH1test * n * ds("cyl|wall", intrules={SEGM: ir})
         laplaceH1_inverse = Preconditioner(laplaceH1, "direct")
         laplaceH1.Assemble()
-    elif precon == "h1amg":
+    elif auxiliary_precon == "h1amg":
         pc_opts = {"ngs_amg_max_coarse_size": 10,
                    # "ngs_amg_log_level": "normal",
                    "ngs_amg_do_test": True,
@@ -120,12 +121,11 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*", hodivfree=Fa
 
         laplaceH1 = BilinearForm(VH1, condense=condense)
         laplaceH1 += nu * 0.25 * InnerProduct(grad(vH1trial) + grad(vH1trial).trans, grad(vH1test) + grad(vH1test).trans) * dx
-
-        laplaceH1 += nu / specialcf.mesh_size * vH1trial * n * vH1test * n * ds("cyl|wall", intrules={SEGM: ir})
-
+        if slip:
+            laplaceH1 += nu / specialcf.mesh_size * vH1trial * n * vH1test * n * ds("cyl|wall", intrules={SEGM: ir})
         laplaceH1_inverse = Preconditioner(laplaceH1, "ngs_amg.elast2d", **pc_opts)
         laplaceH1.Assemble()
-    elif precon == "h1amg_componentwise":
+    elif auxiliary_precon == "h1amg_componentwise":
 
         if mesh.dim == 2:
             VH1_1 = H1(mesh, order=1, dirichlet=diri)
