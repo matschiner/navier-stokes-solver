@@ -27,7 +27,7 @@ from netgen.geom2d import SplineGeometry
 
 num_refinements = int(sys.argv[1])
 precon = "embedded"
-auxiliary_precon = "direct"
+auxiliary_precon = "h1amg"
 geom_name = "tunnel"
 slip = True 
 inflow = None

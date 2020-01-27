@@ -223,18 +223,18 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*", hodivfree=Fa
 
     proj = Projector(X.FreeDofs(True), True)
     emb = proj @ emb
-    emb_trans = emb.T
+
     if mpi_world.size > 1:
         emb = ParallelMatrix(emb,
                              row_pardofs=M.mat.row_pardofs,
                              col_pardofs=M.mat.col_pardofs,
                              op=ParallelMatrix.C2C)
-        emb_trans = ParallelMatrix(emb_trans,
+        """emb_trans = ParallelMatrix(emb_trans,
                              row_pardofs=M.mat.col_pardofs,
                              col_pardofs=M.mat.row_pardofs,
-                             op=ParallelMatrix.D2D)
+                             op=ParallelMatrix.D2D)"""
 
-    emb = WrapMatrix(emb)
+    #emb = WrapMatrix(emb)
     # test if embedding transformation is doing the right thing
     # gfh1 = GridFunction(VH1)
     # gfx = GridFunction(X)
@@ -243,7 +243,7 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*", hodivfree=Fa
     # Draw(gfx.components[0])
     # input("lj")
 
-    return emb @ laplaceH1_inverse @ emb_trans
+    return emb @ laplaceH1_inverse @ emb.T
 
 
 """   class WrapMatrix(BaseMatrix):
