@@ -1,3 +1,4 @@
+import sys
 from ngsolve import *
 import ngs_amg
 
@@ -62,6 +63,7 @@ class EmbeddingTransformation(BaseMatrix):
 def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*", hodivfree=False, slip=False, slip_boundary=[], auxiliary_precon="direct"):
     mesh = X.mesh
 
+
     (u, u_hat, _, _), (v, v_hat, _, _) = X.TnT()
     xfree = X.FreeDofs()
 
@@ -84,11 +86,24 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*", hodivfree=Fa
             if e.mat in slip_boundary:
                 gfchar.vec[vchar.GetDofNrs(e)[0]] = 0
 
+
     M = BilinearForm(trialspace=VH1, testspace=X)
     M += vH1trial * v_dual * dx
     M += vH1trial * v_dual * gfchar * dS
     M += vH1trial * tang(v_hat) * dS
+
+    mpi_world.Barrier()
+    if mpi_world.rank==0:
+        print("BLF dual assemble start")
+    sys.stdout.flush()
+
     M.Assemble()
+
+    mpi_world.Barrier()
+    if mpi_world.rank==0:
+        print("BLF dual assemble end")
+    sys.stdout.flush()
+
 
     Mw = BilinearForm(X)
     Mw += u * v_dual * dx
@@ -224,6 +239,7 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*", hodivfree=Fa
     proj = Projector(X.FreeDofs(True), True)
     emb = proj @ emb
 
+
     if mpi_world.size > 1:
         emb = ParallelMatrix(emb,
                              row_pardofs=M.mat.row_pardofs,
@@ -242,6 +258,7 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*", hodivfree=Fa
     # gfx.vec.data = emb * gfh1.vec
     # Draw(gfx.components[0])
     # input("lj")
+
 
     return emb @ laplaceH1_inverse @ emb.T
 

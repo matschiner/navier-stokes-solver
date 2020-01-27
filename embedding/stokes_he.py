@@ -10,6 +10,7 @@ from solvers.krylovspace import MinRes
 from embedding.helpers import CreateEmbeddingPreconditioner
 from ngsolve.meshes import MakeStructured2DMesh
 
+
 ngsglobals.msg_level = 0
 
 if mpi_world.size == 1:
@@ -27,7 +28,7 @@ from netgen.geom2d import SplineGeometry
 
 num_refinements = int(sys.argv[1])
 precon = "embedded"
-auxiliary_precon = "h1amg"
+auxiliary_precon = ["direct", "h1amg"][1]
 geom_name = "tunnel"
 slip = True
 inflow = None
@@ -162,7 +163,18 @@ if precon == "embedded":
     Ahat_inv = CreateEmbeddingPreconditioner(V, nu, diri=diri, slip=slip, slip_boundary=slip_boundary, auxiliary_precon=auxiliary_precon)
 
     a.Assemble()
+
+    mpi_world.Barrier()
+    if mpi_world.rank==0:
+        print("b before assemble")
+    sys.stdout.flush()
+
     b.Assemble()
+
+    mpi_world.Barrier()
+    if mpi_world.rank==0:
+        print("b after assemble")
+    sys.stdout.flush()
 
     x_free = V.FreeDofs(condense)
 
@@ -179,6 +191,7 @@ if precon == "embedded":
         )
     else:
         precon_blockjac = a.mat.CreateBlockSmoother(blocks)
+
 
     preA = Ahat_inv + precon_blockjac
 else:
