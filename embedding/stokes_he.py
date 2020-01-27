@@ -29,16 +29,16 @@ num_refinements = int(sys.argv[1])
 precon = "embedded"
 auxiliary_precon = "h1amg"
 geom_name = "tunnel"
-slip = True 
+slip = True
 inflow = None
 
-slip_boundary = ["wall"]
+slip_boundary = ["wall", "cyl"]
 if geom_name == "tunnel":
     geom = SplineGeometry()
     geom.AddRectangle((0, 0), (2, 0.41), bcs=("wall", "outlet", "wall", "inlet"))
     geom.AddCircle((0.2, 0.2), r=0.05, leftdomain=0, rightdomain=1, bc="cyl")
     # ngmesh = geom.GenerateMesh(maxh=0.036)
-    diri = "inlet|cyl" + ("" if slip else "|" + ("|".join(slip_boundary)))
+    diri = "inlet" + ("" if slip else "|" + ("|".join(slip_boundary)))
     inflow = "inlet"
 elif geom_name == "stretched":
     geom = None

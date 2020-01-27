@@ -121,7 +121,7 @@ def CreateEmbeddingPreconditioner(X, nu, condense=False, diri=".*", hodivfree=Fa
         laplaceH1 = BilinearForm(VH1, condense=condense)
         laplaceH1 += nu * 0.25 * InnerProduct(grad(vH1trial) + grad(vH1trial).trans, grad(vH1test) + grad(vH1test).trans) * dx
         if slip:
-            laplaceH1 += nu / specialcf.mesh_size * vH1trial * n * vH1test * n * ds("cyl|wall", intrules={SEGM: ir})
+            laplaceH1 += nu / specialcf.mesh_size * vH1trial * n * vH1test * n * ds("|".join(slip_boundary), intrules={SEGM: ir})
         laplaceH1_inverse = Preconditioner(laplaceH1, "ngs_amg.elast2d", **pc_opts)
         laplaceH1.Assemble()
     elif auxiliary_precon == "h1amg_componentwise":
